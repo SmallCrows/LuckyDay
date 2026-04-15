@@ -24,13 +24,22 @@ let startX = 0;
     const deltaX = e.clientX - startX;
     const deltaY = e.clientY - startY; // 计算 Y 轴位移
 
-    // 核心判定：横向位移必须大于纵向位移，且超过阈值
-    // 这样当用户明显在“上下滑动”时，绝对值较大的 deltaY 会阻止切换逻辑
+    // 判定条件1：横向位移大于纵向位移 -> 左右切换月份/周
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD) {
       if (deltaX > 0) {
         prev();
       } else {
         next();
+      }
+    } 
+    // 判定条件2：纵向位移大于横向位移 -> 上下折叠/展开日历
+    else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > SWIPE_THRESHOLD) {
+      if (deltaY < 0 && viewMode === 'month') {
+        // 向上滑 (deltaY 为负)：收缩为【周视图】，为下方内容释放空间
+        setViewMode('week');
+      } else if (deltaY > 0 && viewMode === 'week') {
+        // 向下滑 (deltaY 为正)：展开为【月视图】
+        setViewMode('month');
       }
     }
   }
