@@ -30,9 +30,10 @@
 
 <style>
   /* --- 全局重置与基础设置 --- */
-  :global(body) {
+  :global(html, body) {
     margin: 0;
     padding: 0;
+    height: 100%;
     background-color: #f5f5f7; /* 苹果风格的浅灰底色 */
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     overflow: hidden; /* 彻底禁用 body 层的默认滚动，防止 iOS 橡皮筋效应带来的布局错乱 */
@@ -42,12 +43,15 @@
   .app-container {
     display: flex;
     flex-direction: column;
-    height: 100vh; 
+    height: 100dvh; 
     width: 100%; /* 新增这一行：强制撑开宽度 */
     max-width: 768px; /* 在电脑宽屏上最大宽为 768px（类似 iPad 竖屏），并居中显示 */
     margin: 0 auto;
     background-color: #ffffff;
     box-shadow: 0 0 20px rgba(0,0,0,0.05);
+    /* 确保容器本身不产生滚动，由内部 section 控制 */
+    overflow: hidden; 
+    position: relative;
   }
 
   .fixed-top-section {

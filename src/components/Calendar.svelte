@@ -8,11 +8,12 @@
  
 let startX = 0;
   let startY = 0; // 新增：记录起始 Y 坐标
-  const SWIPE_THRESHOLD = 40; // 适当降低阈值提高灵敏度
+  const SWIPE_THRESHOLD = 30; // 适当降低阈值提高灵敏度
 
   function handlePointerDown(e) {
+    e.currentTarget.setPointerCapture(e.pointerId);
     startX = e.clientX;
-    startY = e.clientY; // 记录按下时的 Y 轴位置
+    startY = e.clientY;
     
     // 阻止某些浏览器的默认拖拽行为，确保事件顺畅
     if (e.pointerType === 'mouse') {
@@ -21,24 +22,20 @@ let startX = 0;
   }
 
   function handlePointerUp(e) {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    
     const deltaX = e.clientX - startX;
     const deltaY = e.clientY - startY; // 计算 Y 轴位移
 
     // 判定条件1：横向位移大于纵向位移 -> 左右切换月份/周
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD) {
-      if (deltaX > 0) {
-        prev();
-      } else {
-        next();
-      }
+      if (deltaX > 0) prev();
+      else next();
     } 
-    // 判定条件2：纵向位移大于横向位移 -> 上下折叠/展开日历
     else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > SWIPE_THRESHOLD) {
       if (deltaY < 0 && viewMode === 'month') {
-        // 向上滑 (deltaY 为负)：收缩为【周视图】，为下方内容释放空间
         setViewMode('week');
       } else if (deltaY > 0 && viewMode === 'week') {
-        // 向下滑 (deltaY 为正)：展开为【月视图】
         setViewMode('month');
       }
     }
@@ -184,6 +181,7 @@ let startX = 0;
     class="days-grid" 
     onpointerdown={handlePointerDown}
     onpointerup={handlePointerUp}
+    style="touch-action: none; user-select: none; -webkit-user-select: none;"
   >
     {#each calendarDays as { date, isCurrentMonth }}
       <div 
