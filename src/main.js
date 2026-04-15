@@ -7,7 +7,6 @@ registerSW({ immediate: true });
 
 const targetNode = document.getElementById('app');
 
-// 1. 清空过渡骨架屏
 targetNode.innerHTML = '';
 
 const app = mount(App, {
