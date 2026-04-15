@@ -5,9 +5,36 @@
 
   let viewMode = $state('week'); 
   let displayDate = $state(new Date()); 
+ 
+let startX = 0;
+  const SWIPE_THRESHOLD = 50; // 触发滑动的最小位移（像素）
+
+function handlePointerDown(e) {
+    // clientX 直接存在于事件对象上，不需要找 touches 数组
+    startX = e.clientX; 
+  }
+
+ function handlePointerUp(e) {
+    const endX = e.clientX;
+    const deltaX = endX - startX;
+
+    if (Math.abs(deltaX) > SWIPE_THRESHOLD) {
+      if (deltaX > 0) {
+        // 向右滑 -> 上一周/月
+        prev();
+      } else {
+        // 向左滑 -> 下一周/月
+        next();
+      }
+    }
+  }
+
+
 
   const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
   const today = new Date();
+
+
 
   // 核心网格数据生成逻辑保持不变
   let calendarDays = $derived.by(() => {
@@ -138,7 +165,11 @@
     {/each}
   </div>
 
-  <div class="days-grid">
+  <div 
+    class="days-grid" 
+    onpointerdown={handlePointerDown}
+    onpointerup={handlePointerUp}
+  >
     {#each calendarDays as { date, isCurrentMonth }}
       <div 
         class="day-cell"
@@ -148,13 +179,13 @@
         onclick={() => selectDate(date)}
       >
         <span class="day-number">{date.getDate()}</span>
-        
         <span class="lunar-text" class:is-holiday={getHoliday(date)}>
           {getHoliday(date) || getLunarText(date)}
         </span>
       </div>
     {/each}
   </div>
+
 </div>
 
 <style>
@@ -255,6 +286,10 @@
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     gap: 4px 0;
+    /* 重要：禁止浏览器默认的横向滚动行为，确保我们的 JS 逻辑接管手势 */
+    touch-action: pan-y; 
+    /* 增加平滑过渡的视觉反馈（可选） */
+    transition: transform 0.2s ease-out;
   }
 
   /* 调整了高度以容纳农历文字 */
