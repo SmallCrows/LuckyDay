@@ -7,23 +7,29 @@
   let displayDate = $state(new Date()); 
  
 let startX = 0;
-  const SWIPE_THRESHOLD = 50; // 触发滑动的最小位移（像素）
+  let startY = 0; // 新增：记录起始 Y 坐标
+  const SWIPE_THRESHOLD = 40; // 适当降低阈值提高灵敏度
 
-function handlePointerDown(e) {
-    // clientX 直接存在于事件对象上，不需要找 touches 数组
-    startX = e.clientX; 
+  function handlePointerDown(e) {
+    startX = e.clientX;
+    startY = e.clientY; // 记录按下时的 Y 轴位置
+    
+    // 阻止某些浏览器的默认拖拽行为，确保事件顺畅
+    if (e.pointerType === 'mouse') {
+      // 电脑端可以不阻止，或者根据需要设置
+    }
   }
 
- function handlePointerUp(e) {
-    const endX = e.clientX;
-    const deltaX = endX - startX;
+  function handlePointerUp(e) {
+    const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY; // 计算 Y 轴位移
 
-    if (Math.abs(deltaX) > SWIPE_THRESHOLD) {
+    // 核心判定：横向位移必须大于纵向位移，且超过阈值
+    // 这样当用户明显在“上下滑动”时，绝对值较大的 deltaY 会阻止切换逻辑
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD) {
       if (deltaX > 0) {
-        // 向右滑 -> 上一周/月
         prev();
       } else {
-        // 向左滑 -> 下一周/月
         next();
       }
     }
@@ -193,6 +199,12 @@ function handlePointerDown(e) {
     background-color: #ffffff;
     padding: 16px;
     border-bottom: 1px solid #f0f0f0;
+    /* 新增：防止拖拽日历时意外选中日期数字或文字 */
+    user-select: none; 
+    -webkit-user-select: none; /* 兼容 Safari */
+    
+    /* 确保指针事件顺畅 */
+    touch-action: pan-y;
   }
 
   .header {
