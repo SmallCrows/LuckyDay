@@ -5,27 +5,33 @@
   import Calendar from './components/Calendar.svelte';
   import AlertBanner from './components/AlertBanner.svelte';
   import ZodiacFortune from './components/ZodiacFortune.svelte';
+  import Almanac from './components/Almanac.svelte'; 
+  import UserEvents from './components/UserEvents.svelte';
 
   // 全局状态变量：当前选中的日期，默认是今天
-  let selectedDate = new Date();
+  let selectedDate = $state(new Date());
+  let showUserEventForm = $state(false); // 控制输入框显隐
 </script>
 
 <main class="app-container">
-  
   <header class="fixed-top-section">
     <StatusBar />
     <WeatherCard />
-    <Calendar bind:currentDate={selectedDate} />
+    <Calendar 
+      bind:currentDate={selectedDate} 
+      onAddTask={() => showUserEventForm = !showUserEventForm} 
+    />
   </header>
 
   <section class="scrollable-bottom-section">
     <AlertBanner />
+    <UserEvents 
+      {selectedDate} 
+      bind:showForm={showUserEventForm} 
+    />
+    <Almanac {selectedDate} />
     <ZodiacFortune {selectedDate} />
-    
-    <!-- <div class="placeholder-box">功能扩展区 1</div>
-    <div class="placeholder-box">功能扩展区 2</div> -->
   </section>
-
 </main>
 
 <style>

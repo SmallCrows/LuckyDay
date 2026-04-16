@@ -1,19 +1,67 @@
 <script>
     import { Lunar } from 'lunar-javascript';
 
-  let { currentDate = $bindable(new Date()) } = $props();
+  let { currentDate = $bindable(new Date()), onAddTask } = $props();
 
   let viewMode = $state('week'); 
   let displayDate = $state(new Date()); 
- 
-let startX = 0;
+
+  // --- 新增：节假日数据加载逻辑 ---
+  let holidayMap = $state({}); // 存储已加载的节假日，格式为 {'YYYY-MM-DD': { name: '元旦', isOff: true }}
+
+  // 按需加载对应年份的 JSON 数据
+  async function loadYearlyHolidays(year) {
+    // 如果已经加载过该年的数据（以1月1日为探测点），则直接跳过，防止重复请求
+    if (holidayMap[`${year}-01-01`] !== undefined) return;
+
+    try {
+      // 通过 CDN 直接读取 github 仓库同步的发布版本数据
+      const url = `https://cdn.jsdelivr.net/npm/holiday-calendar@latest/data/CN/${year}.json`;
+      const response = await fetch(url);
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      const newMap = { ...holidayMap };
+
+      // 解析 JSON 结构：将数组转化为便于快速查找的字典格式
+      data.dates.forEach(item => {
+        newMap[item.date] = {
+          name: item.name_cn, // 节日名称，如 "国庆节"
+          isOff: item.type === 'public_holiday' // true 为放假 (休)，false 为补班 (班)
+        };
+      });
+
+      holidayMap = newMap;
+    } catch (error) {
+      console.error('节假日数据加载失败:', error);
+    }
+  }
+
+  // 监听当前显示的年份，一旦改变就去加载当年数据
+  $effect(() => {
+    loadYearlyHolidays(displayDate.getFullYear());
+  });
+
+  // 获取具体某一天的节假日信息
+  function getHolidayInfo(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${d}`;
+    return holidayMap[dateStr] || null;
+  }
+  // ------------------------------
+
+  let startX = 0;
   let startY = 0; // 新增：记录起始 Y 坐标
+  let isSwiping = false; // 新增：用于判断用户当前是点击还是滑动
   const SWIPE_THRESHOLD = 30; // 适当降低阈值提高灵敏度
 
   function handlePointerDown(e) {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    e.target.releasePointerCapture(e.pointerId);
     startX = e.clientX;
     startY = e.clientY;
+    isSwiping = false; // 每次按下时，重置滑动状态
     
     // 阻止某些浏览器的默认拖拽行为，确保事件顺畅
     if (e.pointerType === 'mouse') {
@@ -29,10 +77,12 @@ let startX = 0;
 
     // 判定条件1：横向位移大于纵向位移 -> 左右切换月份/周
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD) {
+      isSwiping = true; // 触发了横向滑动，打上标记
       if (deltaX > 0) prev();
       else next();
     } 
     else if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > SWIPE_THRESHOLD) {
+      isSwiping = true; // 触发了纵向滑动，打上标记
       if (deltaY < 0 && viewMode === 'month') {
         setViewMode('week');
       } else if (deltaY > 0 && viewMode === 'week') {
@@ -41,6 +91,13 @@ let startX = 0;
     }
   }
 
+  // 新增：安全触发日期的包装函数
+  function handleDateClick(date) {
+    // 只有当用户没有在滑动时，才执行选中逻辑
+    if (!isSwiping) {
+      selectDate(date);
+    }
+  }
 
 
   const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
@@ -151,6 +208,8 @@ let startX = 0;
       <button class="arrow-btn" onclick={prev}>&lt;</button>
       <span class="date-title">{displayDate.getFullYear()}年 {displayDate.getMonth() + 1}月</span>
       <button class="arrow-btn" onclick={next}>&gt;</button>
+
+      <button class="header-add-btn" onclick={onAddTask}>＋</button>
     </div>
     
     <div class="actions">
@@ -177,23 +236,32 @@ let startX = 0;
     {/each}
   </div>
 
-  <div 
+ <div 
     class="days-grid" 
     onpointerdown={handlePointerDown}
     onpointerup={handlePointerUp}
     style="touch-action: none; user-select: none; -webkit-user-select: none;"
   >
     {#each calendarDays as { date, isCurrentMonth }}
+      {@const holidayInfo = getHolidayInfo(date)}
+      
       <div 
         class="day-cell"
         class:not-current={!isCurrentMonth}
         class:selected={date.toDateString() === currentDate.toDateString()}
         class:is-today={date.toDateString() === today.toDateString()}
-        onclick={() => selectDate(date)}
+        onclick={() => handleDateClick(date)}
       >
+        {#if holidayInfo}
+          <span class="corner-mark" class:is-work={!holidayInfo.isOff}>
+            {holidayInfo.isOff ? '休' : '班'}
+          </span>
+        {/if}
+
         <span class="day-number">{date.getDate()}</span>
-        <span class="lunar-text" class:is-holiday={getHoliday(date)}>
-          {getHoliday(date) || getLunarText(date)}
+        
+        <span class="lunar-text" class:is-holiday={holidayInfo?.isOff}>
+          {holidayInfo?.name || getLunarText(date)}
         </span>
       </div>
     {/each}
@@ -313,6 +381,7 @@ let startX = 0;
 
   /* 调整了高度以容纳农历文字 */
   .day-cell {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -349,6 +418,22 @@ let startX = 0;
     color: #ff3b30;
   }
 
+  /* 节假日角标通用样式 */
+  .corner-mark {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 10px;
+    transform: scale(0.85); /* 用缩放让文字比 12px 更小，显得精致 */
+    transform-origin: top right;
+    color: #ff3b30; /* 默认放假为红色字 */
+  }
+
+  /* 补班的角标样式 */
+  .corner-mark.is-work {
+    color: #666666; /* 补班显示为灰色 */
+  }
+
   .day-cell.not-current .day-number,
   .day-cell.not-current .lunar-text {
     color: #cccccc;
@@ -371,5 +456,24 @@ let startX = 0;
   .day-cell.selected.is-today .day-number {
     background-color: #ff3b30;
     color: #fff;
+  }
+
+  .header-add-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background-color: #f0f0f2;
+    border: none;
+    color: #333;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px; /* 紧跟右箭头 */
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .header-add-btn:active {
+    background-color: #e0e0e0;
   }
 </style>

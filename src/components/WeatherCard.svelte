@@ -100,34 +100,28 @@
 
 <div class="weather-card">
   <div class="day-panel">
-    <div class="header">今日</div>
-    <div class="main-display">
-      <span class="icon">{weather.today.icon}</span>
-      <div class="info">
-        <div class="text-temp">{weather.today.text} <span class="temp">{weather.today.temp}</span></div>
-      </div>
+    <div class="header-row">
+      <span class="day-title">今日</span>
+      <span class="details">湿度 {weather.today.humidity} &nbsp;辐射 {weather.today.uv}</span>
     </div>
-    <div class="details">
-      <span>湿度 {weather.today.humidity}</span>
-      <span class="dot">·</span>
-      <span>辐射 {weather.today.uv}</span>
+    <div class="main-row">
+      <span class="icon">{weather.today.icon}</span>
+      <span class="text">{weather.today.text}</span>
+      <span class="temp">{weather.today.temp}</span>
     </div>
   </div>
 
   <div class="divider"></div>
 
   <div class="day-panel tomorrow">
-    <div class="header">明日</div>
-    <div class="main-display">
-      <span class="icon">{weather.tomorrow.icon}</span>
-      <div class="info">
-        <div class="text-temp">{weather.tomorrow.text} <span class="temp">{weather.tomorrow.temp}</span></div>
-      </div>
+    <div class="header-row">
+      <span class="day-title">明日</span>
+      <span class="details">湿度 {weather.tomorrow.humidity} &nbsp;辐射 {weather.tomorrow.uv}</span>
     </div>
-    <div class="details">
-      <span>湿度 {weather.tomorrow.humidity}</span>
-      <span class="dot">·</span>
-      <span>辐射 {weather.tomorrow.uv}</span>
+    <div class="main-row">
+      <span class="icon">{weather.tomorrow.icon}</span>
+      <span class="text">{weather.tomorrow.text}</span>
+      <span class="temp">{weather.tomorrow.temp}</span>
     </div>
   </div>
 </div>
@@ -136,9 +130,10 @@
   .weather-card {
     display: flex;
     margin: 10px 16px;
-    padding: 16px;
+    /* 缩减了上下内边距 */
+    padding: 10px 14px; 
     background-color: #ffffff;
-    border-radius: 16px;
+    border-radius: 12px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
     border: 1px solid #f0f0f0;
   }
@@ -147,7 +142,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    justify-content: center;
   }
 
   .day-panel.tomorrow {
@@ -157,48 +152,51 @@
   .divider {
     width: 1px;
     background-color: #f0f0f0;
-    margin: 0 16px;
+    margin: 0 12px;
   }
 
-  .header {
-    font-size: 13px;
+  /* --- 第一行：标题与细节参数 --- */
+  .header-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .day-title {
+    font-size: 10px;
     color: #888888;
     font-weight: 500;
   }
 
-  .main-display {
+  .details {
+    flex: 1; /* 占据剩余空间 */
+    text-align: center; /* 强制居中 */
+    font-size: 12px; /* 字体稍微调小一点以适应单行显示 */
+    color: #888888;
+  }
+
+  /* --- 第二行：核心气象信息横向排布 --- */
+  .main-row {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    align-items: center; /* 垂直居中对齐 */
+    gap: 8px; /* 元素之间的间距 */
   }
 
   .icon {
-    font-size: 28px;
+    font-size: 22px; /* 稍微缩小图标 */
+    line-height: 1;
   }
 
-  .text-temp {
-    font-size: 18px;
-    font-weight: 600;
-    color: #333333;
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
+  .text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #555555;
   }
 
   .temp {
-    font-size: 22px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #333333;
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  }
-
-  .details {
-    display: flex;
-    align-items: center;
-    font-size: 12px;
-    color: #666666;
-  }
-
-  .dot {
-    margin: 0 6px;
-    color: #cccccc;
   }
 </style>
