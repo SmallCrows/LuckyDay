@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  let { selectedDate, showForm = $bindable(false) } = $props();
+let { selectedDate, showForm = $bindable(false) } = $props();
 
   let events = $state([]);
   let newTaskContent = $state('');
@@ -51,47 +51,74 @@
 </script>
 
 {#if showForm || dailyEvents.length > 0}
-<div class="user-events-card">
-  {#if showForm}
-    <div class="input-form">
-      <input 
-        type="text" 
-        placeholder="记录当下..." 
-        bind:value={newTaskContent}
-        onkeydown={(e) => e.key === 'Enter' && addEvent()}
-      />
-      <div class="quadrant-tools">
-        <button 
-          class="tag-btn" 
-          class:active={isImportant} 
-          onclick={() => isImportant = !isImportant}
-        >重要</button>
-        
-        <button 
-          class="tag-btn" 
-          class:active={isUrgent} 
-          onclick={() => isUrgent = !isUrgent}
-        >紧急</button>
-        
-        <button class="save-btn" onclick={addEvent}>存入</button>
-      </div>
-    </div>
-  {/if}
+<div class="user-events-wrapper">
+  <div class="section-header">
+    <span class="section-title">事件提醒</span>
+  </div>
 
-  {#if dailyEvents.length > 0}
-    <div class="event-list">
-      {#each dailyEvents as event (event.id)}
-        <div class="event-row {getPriorityClass(event.isImportant, event.isUrgent)}">
-          <button class="minus-btn" onclick={() => deleteEvent(event.id)}>－</button>
-          <div class="content-text">{event.content}</div>
+  <div class="user-events-content">
+    {#if showForm}
+      <div class="input-form">
+        <input 
+          type="text" 
+          placeholder="记录当下..." 
+          bind:value={newTaskContent}
+          onkeydown={(e) => e.key === 'Enter' && addEvent()}
+          style="color: #333 !important;" 
+        />
+        <div class="quadrant-tools">
+          <button class="tag-btn" class:active={isImportant} onclick={() => isImportant = !isImportant}>重要</button>
+          <button class="tag-btn" class:active={isUrgent} onclick={() => isUrgent = !isUrgent}>紧急</button>
+          <button class="save-btn" onclick={addEvent}>存入</button>
         </div>
-      {/each}
-    </div>
-  {/if}
+      </div>
+    {/if}
+
+    {#if dailyEvents.length > 0}
+      <div class="event-list">
+        {#each dailyEvents as event (event.id)}
+          <div class="event-row {getPriorityClass(event.isImportant, event.isUrgent)}">
+            <button class="minus-btn" onclick={() => deleteEvent(event.id)}>－</button>
+            <div class="content-text">{event.content}</div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
 </div>
 {/if}
 
 <style>
+/* 外层容器：带框和边距 */
+  .user-events-wrapper {
+    background: #ffffff;
+    border-radius: 16px;
+    margin-bottom: 16px;
+    border: 1px solid #f2f2f2;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    overflow: hidden;
+  }
+
+  /* 栏目标题样式 */
+  .section-header {
+    background-color: #fafafa;
+    padding: 8px 14px;
+    border-bottom: 1px solid #f2f2f2;
+    display: flex;
+  }
+
+  .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #999;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .user-events-content {
+    padding: 14px;
+  }
+
   .user-events-card {
     background: #ffffff;
     border-radius: 16px;
@@ -177,7 +204,11 @@
   .event-row:last-child { border-bottom: none; }
 
   .minus-btn {
-    width: 18px;
+    flex-shrink: 0; /* 防止压扁 */
+    aspect-ratio: 1 / 1;
+    width: 20px;
+    padding: 0;
+
     height: 18px;
     border-radius: 50%;
     border: 1px solid #ff3b30;
@@ -189,7 +220,6 @@
     font-size: 12px;
     margin-right: 12px;
     cursor: pointer;
-    flex-shrink: 0;
   }
 
   .content-text {

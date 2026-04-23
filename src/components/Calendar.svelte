@@ -459,7 +459,12 @@
   }
 
   .header-add-btn {
+    /* 核心修复：防止被挤压 */
+    flex-shrink: 0; 
+    aspect-ratio: 1 / 1;
     width: 26px;
+    /* 移除可能干扰高度的 padding */
+    padding: 0;
     height: 26px;
     border-radius: 50%;
     background-color: #f0f0f2;
