@@ -1,19 +1,19 @@
 <script>
   // --- 配置区域 ---
-  const QWEATHER_KEY = '5df67e2177e54f68a68cb5c08179dda9'; 
+  const QWEATHER_KEY = '你的和风天气API_KEY'; 
   
-  // 气象数据状态模型（新增 city 字段）
+  // 增加页面状态： 'loading' | 'success' | 'failed'
+  let viewState = $state('loading'); 
+  let manualCityName = $state('');
+
   let weather = $state({
-    city: '定位中',
+    city: '--',
     today: { text: '--', temp: '--°C', humidity: '--%', uv: '--', icon: '⛅' },
     tomorrow: { text: '--', temp: '--°C', humidity: '--%', uv: '--', icon: '☁️' }
   });
 
   function getWeatherEmoji(iconCode) {
-    const map = {
-      '100': '☀️', '101': '⛅', '104': '☁️', '300': '🌧️', '305': '🌦️', 
-      '400': '🌨️', '404': '🌨️', '501': '🌫️', '302': '⛈️'
-    };
+    const map = { '100': '☀️', '101': '⛅', '104': '☁️', '300': '🌧️', '305': '🌦️', '400': '🌨️', '404': '🌨️', '501': '🌫️', '302': '⛈️' };
     return map[iconCode] || '🌤️';
   }
 
@@ -26,193 +26,151 @@
     return '极强';
   }
 
-  async function fetchWeather() {
-    const cacheKey = 'weather_auto_cache';
-    const now = Date.now();
-
-    // 读取本地缓存
-    const cachedString = localStorage.getItem(cacheKey);
-    if (cachedString) {
-      const cacheData = JSON.parse(cachedString);
-      if (now - cacheData.timestamp < 3600000) {
-        weather = cacheData.data;
-        return;
-      }
-    }
-
-    // 设置兜底默认值（当 IP 定位被手机拦截时使用）
-    let targetLocationId = '101010100'; // 北京的 City ID
-    let targetCityName = '北京';
-
+  // 核心拉取逻辑（根据 location 字符串，可能是 IP、坐标或城市名）
+  async function fetchWeatherDataByLocation(locationQuery) {
     try {
-      // 第一阶段：尝试 IP 自动定位（独立捕获异常）
-      try {
-        const ipRes = await fetch('https://api.ipify.org?format=json');
-        const { ip } = await ipRes.json();
-
-        const geoRes = await fetch(`https://mx6vhghb2n.re.qweatherapi.com/geo/v2/city/lookup?location=${ip}&key=${QWEATHER_KEY}`);
-        const geoData = await geoRes.json();
-        
-        if (geoData.code === '200' && geoData.location && geoData.location.length > 0) {
-          targetLocationId = geoData.location[0].id;
-          targetCityName = geoData.location[0].name;
-        }
-      } catch (locationError) {
-        // 如果定位接口被广告拦截器或手机隐私策略拦截，只会走到这里
-        // 控制台打印日志，但不阻断流程
-        console.warn('IP定位被浏览器拦截，将使用默认城市进行回退:', locationError);
-        // 可选：在界面上给个微弱的提示
-        targetCityName = '北京 (默认)'; 
-      }
-
-      // 第二阶段：拉取核心气象数据（使用定位到的 ID 或默认 ID）
-      const weatherRes = await fetch(`https://mx6vhghb2n.re.qweatherapi.com/v7/weather/3d?location=${locationId}&key=${QWEATHER_KEY}`);
-      const weatherData = await weatherRes.json();
-
-      if (weatherData.code === '200' && weatherData.daily) {
-        const t0 = weatherData.daily[0];
-        const t1 = weatherData.daily[1];
-
-        // 批量更新状态
-        weather = {
-          city: targetCityName,
-          today: {
-            text: t0.textDay,
-            temp: `${t0.tempMax}°C`,
-            humidity: `${t0.humidity}%`,
-            uv: getUVText(t0.uvIndex),
-            icon: getWeatherEmoji(t0.iconDay)
-          },
-          tomorrow: {
-            text: t1.textDay,
-            temp: `${t1.tempMax}°C`,
-            humidity: `${t1.humidity}%`,
-            uv: getUVText(t1.uvIndex),
-            icon: getWeatherEmoji(t1.iconDay)
-          }
-        };
-
-        // 存入缓存
-        localStorage.setItem(cacheKey, JSON.stringify({
-          timestamp: now,
-          data: weather
-        }));
-      } else {
-        throw new Error('和风天气返回异常状态码: ' + weatherData.code);
-      }
-    } catch (error) {
-      // 只有天气接口真正挂掉（或断网）时，才会显示网络异常
-      console.error('气象数据获取彻底失败:', error);
-      if (weather.city === '定位中') weather.city = '网络异常';
-    }
-  }
-/*
-  async function fetchWeather() {
-    const cacheKey = 'weather_auto_cache';
-    const now = Date.now();
-
-    // 读取本地缓存
-    const cachedString = localStorage.getItem(cacheKey);
-    if (cachedString) {
-      const cacheData = JSON.parse(cachedString);
-      if (now - cacheData.timestamp < 3600000) {
-        weather = cacheData.data;
-        return;
-      }
-    }
-
-    try {
-      // 1. 获取当前设备的公网 IP
-      const ipRes = await fetch('https://api.ipify.org?format=json');
-      const { ip } = await ipRes.json();
-
-      // 2. 调用和风 GeoAPI 解析 IP 对应的城市代码
-      //const geoRes = await fetch(`https://geoapi.qweather.com/v2/city/lookup?location=${ip}&key=${QWEATHER_KEY}`);
-      const geoRes = await fetch(`https://mx6vhghb2n.re.qweatherapi.com/geo/v2/city/lookup?location=${ip}&key=${QWEATHER_KEY}`);
+      // 1. 通过查询词获取精确的 City ID
+      const geoRes = await fetch(`https://geoapi.qweather.com/v2/city/lookup?location=${locationQuery}&key=${QWEATHER_KEY}`);
       const geoData = await geoRes.json();
       
       if (geoData.code !== '200' || !geoData.location || geoData.location.length === 0) {
-        weather.city = '定位失败';
-        return;
+        throw new Error('未找到该城市');
       }
       
-      const locNode = geoData.location[0];
-      const locationId = locNode.id;
-      const cityName = locNode.name; // 获取解析到的城市/区县名
+      const targetLocationId = geoData.location[0].id;
+      const targetCityName = geoData.location[0].name;
 
-      // 3. 使用解析出的代码拉取天气数据
-      const weatherRes = await fetch(`https://mx6vhghb2n.re.qweatherapi.com/v7/weather/3d?location=${locationId}&key=${QWEATHER_KEY}`);
+      // 2. 拉取天气
+      const weatherRes = await fetch(`https://devapi.qweather.com/v7/weather/3d?location=${targetLocationId}&key=${QWEATHER_KEY}`);
       const weatherData = await weatherRes.json();
 
       if (weatherData.code === '200' && weatherData.daily) {
         const t0 = weatherData.daily[0];
         const t1 = weatherData.daily[1];
 
-        // 批量更新状态
         weather = {
-          city: cityName,
-          today: {
-            text: t0.textDay,
-            temp: `${t0.tempMax}°C`,
-            humidity: `${t0.humidity}%`,
-            uv: getUVText(t0.uvIndex),
-            icon: getWeatherEmoji(t0.iconDay)
-          },
-          tomorrow: {
-            text: t1.textDay,
-            temp: `${t1.tempMax}°C`,
-            humidity: `${t1.humidity}%`,
-            uv: getUVText(t1.uvIndex),
-            icon: getWeatherEmoji(t1.iconDay)
-          }
+          city: targetCityName,
+          today: { text: t0.textDay, temp: `${t0.tempMax}°C`, humidity: `${t0.humidity}%`, uv: getUVText(t0.uvIndex), icon: getWeatherEmoji(t0.iconDay) },
+          tomorrow: { text: t1.textDay, temp: `${t1.tempMax}°C`, humidity: `${t1.humidity}%`, uv: getUVText(t1.uvIndex), icon: getWeatherEmoji(t1.iconDay) }
         };
+        
+        viewState = 'success'; // 切换到成功视图
 
-        // 存入缓存
-        localStorage.setItem(cacheKey, JSON.stringify({
-          timestamp: now,
+        // 更新缓存
+        localStorage.setItem('weather_auto_cache', JSON.stringify({
+          timestamp: Date.now(),
           data: weather
         }));
       }
     } catch (error) {
-      console.error('获取天气或定位失败:', error);
-      if (weather.city === '定位中') weather.city = '网络异常';
+      console.error('获取气象数据失败:', error);
+      viewState = 'failed'; // 切换到失败视图
     }
   }
-    */
+
+  // 初始化获取逻辑 (尝试 IP 定位)
+  async function initWeather() {
+    const cachedString = localStorage.getItem('weather_auto_cache');
+    if (cachedString) {
+      const cacheData = JSON.parse(cachedString);
+      if (Date.now() - cacheData.timestamp < 3600000) {
+        weather = cacheData.data;
+        viewState = 'success';
+        return;
+      }
+    }
+
+    try {
+      const ipRes = await fetch('https://api.ipify.org?format=json');
+      const { ip } = await ipRes.json();
+      await fetchWeatherDataByLocation(ip);
+    } catch (error) {
+      console.warn('IP嗅探失败，进入手动模式', error);
+      viewState = 'failed'; // IP 被拦截，直接展示备用 UI
+    }
+  }
+
+  // --- 备选方案 1：请求 GPS 权限 ---
+  function requestGPS() {
+    if (!navigator.geolocation) {
+      alert("您的浏览器不支持系统定位");
+      return;
+    }
+    viewState = 'loading';
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        // 和风支持直接传入 经度,纬度
+        const query = `${position.coords.longitude.toFixed(2)},${position.coords.latitude.toFixed(2)}`;
+        fetchWeatherDataByLocation(query);
+      },
+      (error) => {
+        alert("定位权限被拒绝，请手动输入城市");
+        viewState = 'failed';
+      }
+    );
+  }
+
+  // --- 备选方案 2：手动输入城市 ---
+  function searchManual() {
+    if (!manualCityName.trim()) return;
+    viewState = 'loading';
+    fetchWeatherDataByLocation(manualCityName.trim());
+  }
 
   $effect(() => {
     if (QWEATHER_KEY !== '你的和风天气API_KEY') {
-      fetchWeather();
+      initWeather();
     }
   });
 </script>
 
 <div class="weather-card">
-  <div class="day-panel">
-    <div class="header-row">
-      <span class="day-title">今日 · {weather.city}</span>
-      <span class="details">湿度 {weather.today.humidity} &nbsp;辐射 {weather.today.uv}</span>
+  {#if viewState === 'success'}
+    <div class="day-panel">
+      <div class="header-row">
+        <span class="day-title">今日 · {weather.city}</span>
+        <span class="details">湿度 {weather.today.humidity} &nbsp;辐射 {weather.today.uv}</span>
+      </div>
+      <div class="main-row">
+        <span class="icon">{weather.today.icon}</span>
+        <span class="text">{weather.today.text}</span>
+        <span class="temp">{weather.today.temp}</span>
+      </div>
     </div>
-    <div class="main-row">
-      <span class="icon">{weather.today.icon}</span>
-      <span class="text">{weather.today.text}</span>
-      <span class="temp">{weather.today.temp}</span>
+    <div class="divider"></div>
+    <div class="day-panel tomorrow">
+      <div class="header-row">
+        <span class="day-title">明日</span>
+        <span class="details">湿度 {weather.tomorrow.humidity} &nbsp;辐射 {weather.tomorrow.uv}</span>
+      </div>
+      <div class="main-row">
+        <span class="icon">{weather.tomorrow.icon}</span>
+        <span class="text">{weather.tomorrow.text}</span>
+        <span class="temp">{weather.tomorrow.temp}</span>
+      </div>
     </div>
-  </div>
 
-  <div class="divider"></div>
+  {:else if viewState === 'failed'}
+    <div class="fallback-panel">
+      <div class="fallback-msg">无法获取位置，请选择：</div>
+      <div class="fallback-actions">
+        <button class="gps-btn" onclick={requestGPS}>获取定位权限</button>
+        <span class="or-text">或</span>
+        <div class="search-box">
+          <input 
+            type="text" 
+            placeholder="如: 北京" 
+            bind:value={manualCityName}
+            onkeydown={(e) => e.key === 'Enter' && searchManual()}
+          />
+          <button class="search-btn" onclick={searchManual}>确认</button>
+        </div>
+      </div>
+    </div>
 
-  <div class="day-panel tomorrow">
-    <div class="header-row">
-      <span class="day-title">明日</span>
-      <span class="details">湿度 {weather.tomorrow.humidity} &nbsp;辐射 {weather.tomorrow.uv}</span>
-    </div>
-    <div class="main-row">
-      <span class="icon">{weather.tomorrow.icon}</span>
-      <span class="text">{weather.tomorrow.text}</span>
-      <span class="temp">{weather.tomorrow.temp}</span>
-    </div>
-  </div>
+  {:else}
+    <div class="loading-panel">气象数据同步中...</div>
+  {/if}
 </div>
 
 <style>
@@ -224,65 +182,92 @@
     border-radius: 12px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
     border: 1px solid #f0f0f0;
+    min-height: 52px; /* 保证卡片有基础高度 */
   }
 
-  .day-panel {
-    flex: 1;
+  /* --- 正常天气卡片样式 (保持不变) --- */
+  .day-panel { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .day-panel.tomorrow { opacity: 0.85; }
+  .divider { width: 1px; background-color: #f0f0f0; margin: 0 12px; }
+  .header-row { display: flex; align-items: center; margin-bottom: 6px; }
+  .day-title { font-size: 12px; color: #888888; font-weight: 500; }
+  .details { flex: 1; text-align: center; font-size: 10px; color: #888888; }
+  .main-row { display: flex; align-items: center; gap: 8px; }
+  .icon { font-size: 22px; line-height: 1; }
+  .text { font-size: 14px; font-weight: 500; color: #555555; }
+  .temp { font-size: 18px; font-weight: 600; color: #333333; font-family: -apple-system, sans-serif; }
+
+  /* --- 降级 UI 样式 --- */
+  .fallback-panel {
+    width: 100%;
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 4px 0;
+  }
+  
+  .fallback-msg {
+    font-size: 12px;
+    color: #666;
+  }
+
+  .fallback-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
     justify-content: center;
   }
 
-  .day-panel.tomorrow {
-    opacity: 0.85;
-  }
-
-  .divider {
-    width: 1px;
-    background-color: #f0f0f0;
-    margin: 0 12px;
-  }
-
-  .header-row {
-    display: flex;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-
-  .day-title {
+  .gps-btn {
+    background-color: #f0f0f2;
+    color: #333;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
     font-size: 12px;
-    color: #888888;
-    font-weight: 500;
+    cursor: pointer;
   }
 
-  .details {
-    flex: 1; 
-    text-align: center; 
-    font-size: 10px; 
-    color: #888888;
+  .or-text {
+    font-size: 12px;
+    color: #999;
   }
 
-  .main-row {
+  .search-box {
     display: flex;
-    align-items: center; 
-    gap: 8px; 
+    background: #f9f9fb;
+    border-radius: 6px;
+    border: 1px solid #eee;
+    overflow: hidden;
   }
 
-  .icon {
-    font-size: 22px; 
-    line-height: 1;
+  .search-box input {
+    border: none;
+    background: transparent;
+    padding: 4px 8px;
+    font-size: 12px;
+    width: 70px;
+    outline: none;
+    color: #333;
   }
 
-  .text {
-    font-size: 14px;
-    font-weight: 500;
-    color: #555555;
+  .search-btn {
+    background: #007aff;
+    color: #fff;
+    border: none;
+    padding: 0 10px;
+    font-size: 12px;
+    cursor: pointer;
   }
 
-  .temp {
-    font-size: 18px;
-    font-weight: 600;
-    color: #333333;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  .loading-panel {
+    width: 100%;
+    text-align: center;
+    font-size: 12px;
+    color: #999;
+    padding: 10px 0;
   }
 </style>
