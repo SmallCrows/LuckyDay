@@ -7,6 +7,7 @@
   import ZodiacFortune from './components/ZodiacFortune.svelte';
   import Almanac from './components/Almanac.svelte'; 
   import UserEvents from './components/UserEvents.svelte';
+  import PwaInstallPrompt from './components/PwaInstallPrompt.svelte';
 
   // 全局状态变量：当前选中的日期，默认是今天
   let selectedDate = $state(new Date());
@@ -32,6 +33,8 @@
     <Almanac {selectedDate} />
     <ZodiacFortune {selectedDate} />
   </section>
+
+  <PwaInstallPrompt />
 </main>
 
 <style>
