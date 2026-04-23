@@ -1,85 +1,104 @@
 <script>
-  // 接收从 App.svelte 传来的全局选定日期
   let { selectedDate } = $props();
 
-  // 1. 星座计算核心逻辑 (纯原生，无依赖)
-  function getZodiacInfo(date) {
-    const m = date.getMonth() + 1;
-    const d = date.getDate();
-    
-    if ((m == 3 && d >= 21) || (m == 4 && d <= 19)) return { name: '白羊座', icon: '♈', element: '火象' };
-    if ((m == 4 && d >= 20) || (m == 5 && d <= 20)) return { name: '金牛座', icon: '♉', element: '土象' };
-    if ((m == 5 && d >= 21) || (m == 6 && d <= 21)) return { name: '双子座', icon: '♊', element: '风象' };
-    if ((m == 6 && d >= 22) || (m == 7 && d <= 22)) return { name: '巨蟹座', icon: '♋', element: '水象' };
-    if ((m == 7 && d >= 23) || (m == 8 && d <= 22)) return { name: '狮子座', icon: '♌', element: '火象' };
-    if ((m == 8 && d >= 23) || (m == 9 && d <= 22)) return { name: '处女座', icon: '♍', element: '土象' };
-    if ((m == 9 && d >= 23) || (m == 10 && d <= 23)) return { name: '天秤座', icon: '♎', element: '风象' };
-    if ((m == 10 && d >= 24) || (m == 11 && d <= 22)) return { name: '天蝎座', icon: '♏', element: '水象' };
-    if ((m == 11 && d >= 23) || (m == 12 && d <= 21)) return { name: '射手座', icon: '♐', element: '火象' };
-    if ((m == 12 && d >= 22) || (m == 1 && d <= 19)) return { name: '摩羯座', icon: '♑', element: '土象' };
-    if ((m == 1 && d >= 20) || (m == 2 && d <= 18)) return { name: '水瓶座', icon: '♒', element: '风象' };
-    return { name: '双鱼座', icon: '♓', element: '水象' };
+  // 1. 星座判定核心逻辑
+  const zodiacData = [
+    { name: '摩羯座', icon: '♑', cutoff: 20 }, // 1月
+    { name: '水瓶座', icon: '♒', cutoff: 19 }, // 2月
+    { name: '双鱼座', icon: '♓', cutoff: 21 }, // 3月
+    { name: '白羊座', icon: '♈', cutoff: 20 }, // 4月
+    { name: '金牛座', icon: '♉', cutoff: 21 }, // 5月
+    { name: '双子座', icon: '♊', cutoff: 22 }, // 6月
+    { name: '巨蟹座', icon: '♋', cutoff: 23 }, // 7月
+    { name: '狮子座', icon: '♌', cutoff: 23 }, // 8月
+    { name: '处女座', icon: '♍', cutoff: 23 }, // 9月
+    { name: '天秤座', icon: '♎', cutoff: 24 }, // 10月
+    { name: '天蝎座', icon: '♏', cutoff: 23 }, // 11月
+    { name: '射手座', icon: '♐', cutoff: 22 }  // 12月
+  ];
+
+  // 计算当前星座
+  let currentZodiac = $derived.by(() => {
+    const month = selectedDate.getMonth(); // 0-11
+    const day = selectedDate.getDate();
+    // 如果日期小于当月的分界线，则属于上一个星座；否则属于当前索引对应的星座
+    const index = day < zodiacData[month].cutoff ? (month === 0 ? 11 : month - 1) : month;
+    return zodiacData[index];
+  });
+
+  // 2. 伪随机数生成器 (基于字符串种子)
+  function seededRandom(str) {
+    let h = 0x811c9dc5; // FNV-1a 偏移基准
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193); // FNV 素数
+    }
+    return (h >>> 0) / 4294967296;
   }
 
-  // 2. 模拟运势接口 (用日期和星座名字生成伪随机数据)
-  function fetchMockFortune(date, zodiacName) {
-    // 简单的伪随机算法，保证同一天同一个星座运势固定
-    const seed = date.getDate() + date.getMonth() + zodiacName.charCodeAt(0);
-    const score = (seed % 5) + 1; // 生成 1 到 5 的评分
+  // 3. 极简去脂的文案库 (可后续自行扩充)
+  const db = {
+    overview: ["静水流深，宜内向探索。", "磁场共振，将迎来意外之喜。", "保持钝感力，切忌过度解析周遭环境。", "能量充沛，适合推进滞留项目。", "屏息凝神，等待关键节点的出现。"],
+    love: ["剥离期待，关注真实的情感流动。", "沟通频率同频，适合解除旧日误会。", "保持物理与心理的适度留白。", "直觉敏锐，能捕捉到隐秘的情感信号。"],
+    career: ["避开正面冲突，采取迂回战术。", "专注底层逻辑，拒绝无意义的资源消耗。", "团队协作呈现高熵状态，需你强力介入梳理。", "稳点阵脚，按既定轨道航行。"],
+    wealth: ["资产配置宜收缩，警惕高杠杆诱惑。", "小幅波段操作可见效，长线需蛰伏。", "正财稳固，偏财隐没于暗处。", "知识变现通道开启，可尝试输出。"]
+  };
+
+  // 根据日期和星座生成当日唯一运势
+  let fortune = $derived.by(() => {
+    const dateStr = `${selectedDate.getFullYear()}-${selectedDate.getMonth() + 1}-${selectedDate.getDate()}`;
+    const seed = `${dateStr}-${currentZodiac.name}`;
     
-    const messages = [
-      "今日宜静不宜动，保持平常心。",
-      "有意外的惊喜，适合去尝试新鲜事物。",
-      "工作/学习效率极高，抓住灵感闪现的瞬间。",
-      "沟通可能会有些障碍，注意表达方式。",
-      "财运不错，但要注意控制冲动消费。"
-    ];
-    const msgIndex = seed % messages.length;
+    // 生成一系列0-1的伪随机数
+    const r1 = seededRandom(seed + "O");
+    const r2 = seededRandom(seed + "L");
+    const r3 = seededRandom(seed + "C");
+    const r4 = seededRandom(seed + "W");
+
+    // 计算星级 (3到5星)
+    const stars = 3 + Math.floor(r1 * 3);
 
     return {
-      stars: score,
-      color: '#ffa600', // 星星的颜色
-      message: messages[msgIndex],
-      luckyNumber: (seed % 9) + 1
+      stars: Array(stars).fill('★').join('') + Array(5 - stars).fill('☆').join(''),
+      overview: db.overview[Math.floor(r1 * db.overview.length)],
+      love: db.love[Math.floor(r2 * db.love.length)],
+      career: db.career[Math.floor(r3 * db.career.length)],
+      wealth: db.wealth[Math.floor(r4 * db.wealth.length)]
     };
-  }
-
-  // 3. 使用 $derived 让数据根据 selectedDate 自动更新
-  let zodiac = $derived(getZodiacInfo(selectedDate));
-  let fortune = $derived(fetchMockFortune(selectedDate, zodiac.name));
-
-  // 辅助函数：渲染星星
-  function renderStars(count) {
-    return '★'.repeat(count) + '☆'.repeat(5 - count);
-  }
+  });
 </script>
 
-<div class="zodiac-fortune-card">
-  <div class="zodiac-section">
-    <div class="icon">{zodiac.icon}</div>
-    <div class="name">{zodiac.name}</div>
-    <div class="tag">{zodiac.element}</div>
+<div class="zodiac-card">
+  <div class="header">
+    <div class="title-group">
+      <span class="icon">{currentZodiac.icon}</span>
+      <span class="name">{currentZodiac.name}</span>
+    </div>
+    <div class="rating">{fortune.stars}</div>
   </div>
 
-  <div class="divider"></div>
-
-  <div class="fortune-section">
-    <div class="fortune-header">
-      <span class="label">今日运势</span>
-      <span class="stars" style="color: {fortune.color}">{renderStars(fortune.stars)}</span>
-    </div>
-    <div class="message">
-      {fortune.message}
-    </div>
-    <div class="lucky-tips">
-      幸运数字：<span>{fortune.luckyNumber}</span>
+  <div class="content">
+    <div class="desc-text main-desc">{fortune.overview}</div>
+    
+    <div class="grid-stats">
+      <div class="stat-item">
+        <span class="label">情感</span>
+        <span class="text">{fortune.love}</span>
+      </div>
+      <div class="stat-item">
+        <span class="label">事业</span>
+        <span class="text">{fortune.career}</span>
+      </div>
+      <div class="stat-item">
+        <span class="label">财富</span>
+        <span class="text">{fortune.wealth}</span>
+      </div>
     </div>
   </div>
 </div>
 
 <style>
-  .zodiac-fortune-card {
-    display: flex;
+  .zodiac-card {
     background-color: #ffffff;
     border-radius: 16px;
     padding: 16px;
@@ -88,83 +107,81 @@
     border: 1px solid #f0f0f0;
   }
 
-  /* 左侧星座区块 */
-  .zodiac-section {
+  .header {
     display: flex;
-    flex-direction: column;
+    justify-content: space-between;
     align-items: center;
-    justify-content: center;
-    min-width: 80px;
+    border-bottom: 1px dashed #eeeeee;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
   }
 
-  .zodiac-section .icon {
-    font-size: 32px;
-    line-height: 1;
-    margin-bottom: 4px;
-  }
-
-  .zodiac-section .name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #333;
-  }
-
-  .zodiac-section .tag {
-    font-size: 11px;
-    color: #888;
-    background-color: #f5f5f7;
-    padding: 2px 8px;
-    border-radius: 10px;
-    margin-top: 4px;
-  }
-
-  /* 分割线 */
-  .divider {
-    width: 1px;
-    background-color: #f0f0f0;
-    margin: 0 16px;
-  }
-
-  /* 右侧运势区块 */
-  .fortune-section {
-    flex: 1;
+  .title-group {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
+    align-items: center;
     gap: 8px;
   }
 
-  .fortune-header {
+  .icon {
+    font-size: 20px;
+    color: #333;
+    background: #f5f5f7;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    border-radius: 8px;
   }
 
-  .fortune-header .label {
-    font-size: 14px;
+  .name {
+    font-size: 15px;
     font-weight: 600;
     color: #333;
+    letter-spacing: 1px;
   }
 
-  .fortune-header .stars {
+  .rating {
+    color: #f1a100;
     font-size: 14px;
     letter-spacing: 2px;
   }
 
-  .message {
-    font-size: 13px;
-    color: #666;
+  .main-desc {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 16px;
     line-height: 1.5;
   }
 
-  .lucky-tips {
-    font-size: 12px;
-    color: #999;
+  .grid-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
 
-  .lucky-tips span {
-    color: #ff3b30;
-    font-weight: bold;
-    margin-left: 4px;
+  .stat-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: #f9f9fb;
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+
+  .label {
+    font-size: 11px;
+    color: #888;
+    background: #e8e8eb;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .text {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.4;
   }
 </style>
