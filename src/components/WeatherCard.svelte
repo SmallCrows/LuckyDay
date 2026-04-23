@@ -40,6 +40,87 @@
       }
     }
 
+    // 设置兜底默认值（当 IP 定位被手机拦截时使用）
+    let targetLocationId = '101010100'; // 北京的 City ID
+    let targetCityName = '北京';
+
+    try {
+      // 第一阶段：尝试 IP 自动定位（独立捕获异常）
+      try {
+        const ipRes = await fetch('https://api.ipify.org?format=json');
+        const { ip } = await ipRes.json();
+
+        const geoRes = await fetch(`https://mx6vhghb2n.re.qweatherapi.com/geo/v2/city/lookup?location=${ip}&key=${QWEATHER_KEY}`);
+        const geoData = await geoRes.json();
+        
+        if (geoData.code === '200' && geoData.location && geoData.location.length > 0) {
+          targetLocationId = geoData.location[0].id;
+          targetCityName = geoData.location[0].name;
+        }
+      } catch (locationError) {
+        // 如果定位接口被广告拦截器或手机隐私策略拦截，只会走到这里
+        // 控制台打印日志，但不阻断流程
+        console.warn('IP定位被浏览器拦截，将使用默认城市进行回退:', locationError);
+        // 可选：在界面上给个微弱的提示
+        targetCityName = '北京 (默认)'; 
+      }
+
+      // 第二阶段：拉取核心气象数据（使用定位到的 ID 或默认 ID）
+      const weatherRes = await fetch(`https://mx6vhghb2n.re.qweatherapi.com/v7/weather/3d?location=${locationId}&key=${QWEATHER_KEY}`);
+      const weatherData = await weatherRes.json();
+
+      if (weatherData.code === '200' && weatherData.daily) {
+        const t0 = weatherData.daily[0];
+        const t1 = weatherData.daily[1];
+
+        // 批量更新状态
+        weather = {
+          city: targetCityName,
+          today: {
+            text: t0.textDay,
+            temp: `${t0.tempMax}°C`,
+            humidity: `${t0.humidity}%`,
+            uv: getUVText(t0.uvIndex),
+            icon: getWeatherEmoji(t0.iconDay)
+          },
+          tomorrow: {
+            text: t1.textDay,
+            temp: `${t1.tempMax}°C`,
+            humidity: `${t1.humidity}%`,
+            uv: getUVText(t1.uvIndex),
+            icon: getWeatherEmoji(t1.iconDay)
+          }
+        };
+
+        // 存入缓存
+        localStorage.setItem(cacheKey, JSON.stringify({
+          timestamp: now,
+          data: weather
+        }));
+      } else {
+        throw new Error('和风天气返回异常状态码: ' + weatherData.code);
+      }
+    } catch (error) {
+      // 只有天气接口真正挂掉（或断网）时，才会显示网络异常
+      console.error('气象数据获取彻底失败:', error);
+      if (weather.city === '定位中') weather.city = '网络异常';
+    }
+  }
+/*
+  async function fetchWeather() {
+    const cacheKey = 'weather_auto_cache';
+    const now = Date.now();
+
+    // 读取本地缓存
+    const cachedString = localStorage.getItem(cacheKey);
+    if (cachedString) {
+      const cacheData = JSON.parse(cachedString);
+      if (now - cacheData.timestamp < 3600000) {
+        weather = cacheData.data;
+        return;
+      }
+    }
+
     try {
       // 1. 获取当前设备的公网 IP
       const ipRes = await fetch('https://api.ipify.org?format=json');
@@ -97,6 +178,7 @@
       if (weather.city === '定位中') weather.city = '网络异常';
     }
   }
+    */
 
   $effect(() => {
     if (QWEATHER_KEY !== '你的和风天气API_KEY') {
