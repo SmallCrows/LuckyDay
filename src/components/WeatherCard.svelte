@@ -1,6 +1,6 @@
 <script>
   // --- 配置区域 ---
-  const QWEATHER_KEY = '你的和风天气API_KEY'; 
+  const QWEATHER_KEY = '5df67e2177e54f68a68cb5c08179dda9'; 
   
   // 增加页面状态： 'loading' | 'success' | 'failed'
   let viewState = $state('loading'); 
@@ -30,7 +30,7 @@
   async function fetchWeatherDataByLocation(locationQuery) {
     try {
       // 1. 通过查询词获取精确的 City ID
-      const geoRes = await fetch(`https://geoapi.qweather.com/v2/city/lookup?location=${locationQuery}&key=${QWEATHER_KEY}`);
+      const geoRes = await fetch(`https://mx6vhghb2n.re.qweatherapi.com/geo/v2/city/lookup?location=${locationQuery}&key=${QWEATHER_KEY}`);
       const geoData = await geoRes.json();
       
       if (geoData.code !== '200' || !geoData.location || geoData.location.length === 0) {
@@ -41,7 +41,7 @@
       const targetCityName = geoData.location[0].name;
 
       // 2. 拉取天气
-      const weatherRes = await fetch(`https://devapi.qweather.com/v7/weather/3d?location=${targetLocationId}&key=${QWEATHER_KEY}`);
+      const weatherRes = await fetch(`https://mx6vhghb2n.re.qweatherapi.com/v7/weather/3d?location=${targetLocationId}&key=${QWEATHER_KEY}`);
       const weatherData = await weatherRes.json();
 
       if (weatherData.code === '200' && weatherData.daily) {
@@ -118,7 +118,7 @@
   }
 
   $effect(() => {
-    if (QWEATHER_KEY !== '你的和风天气API_KEY') {
+    if (QWEATHER_KEY !== 'NONE') {
       initWeather();
     }
   });
