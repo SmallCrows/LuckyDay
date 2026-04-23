@@ -92,20 +92,45 @@
 
   // --- 备选方案 1：请求 GPS 权限 ---
   function requestGPS() {
+    // 1. 前置安全环境检查 (HTTPS 或 localhost)
+    if (window.isSecureContext === false) {
+      alert("开发环境限制：苹果设备要求必须在 HTTPS 下才能弹窗获取定位。\n\n请先使用“手动输入”测试功能。");
+      viewState = 'failed';
+      return;
+    }
+
     if (!navigator.geolocation) {
       alert("您的浏览器不支持系统定位");
       return;
     }
-    viewState = 'loading';
+    viewState = 'Loading';
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        // 和风支持直接传入 经度,纬度
         const query = `${position.coords.longitude.toFixed(2)},${position.coords.latitude.toFixed(2)}`;
         fetchWeatherDataByLocation(query);
       },
       (error) => {
-        alert("定位权限被拒绝，请手动输入城市");
-        viewState = 'failed';
+        console.warn("定位失败原因:", error);
+        
+        // 2. 细分错误类型，给出有价值的用户引导
+        if (error.code === 1) { // PERMISSION_DENIED
+          alert("无法获取定位。\n\n如果您想使用自动定位，请前往手机的【设置 -> 隐私与安全性 -> 定位服务 -> Safari浏览器】中，将权限改为“询问”或“使用App时”。");
+        } else if (error.code === 2) { // POSITION_UNAVAILABLE
+          alert("手机信号弱或 GPS 模块异常，无法确定物理位置，请手动输入城市。");
+        } else if (error.code === 3) { // TIMEOUT
+          alert("获取位置请求超时，请检查网络或手动输入城市。");
+        } else {
+          alert("定位失败，请手动输入城市。");
+        }
+        
+        viewState = 'Failed';
+      },
+      // 3. 增加请求配置，提高获取几率
+      {
+        enableHighAccuracy: true, // 尝试高精度
+        timeout: 10000,           // 10秒超时限制
+        maximumAge: 0             // 强制获取最新位置，不用缓存
       }
     );
   }
