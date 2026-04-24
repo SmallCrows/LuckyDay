@@ -8,13 +8,25 @@
   import Almanac from './components/Almanac.svelte'; 
   import UserEvents from './components/UserEvents.svelte';
   import PwaInstallPrompt from './components/PwaInstallPrompt.svelte';
+  import NewsLiveView from './components/NewsLiveView.svelte';
 
+  let currentView = $state('main'); // 'main' 或 'news'
   // 全局状态变量：当前选中的日期，默认是今天
   let selectedDate = $state(new Date());
   let showUserEventForm = $state(false); // 控制输入框显隐
+
+  // 模拟在线状态
+  let isOnline = $state(true);
 </script>
 
 <main class="app-container">
+
+{#if currentView === 'main'}
+    <button class="side-news-trigger" onclick={() => currentView = 'news'}>
+      <span class="pulse-dot"></span>
+      简讯
+    </button>
+
   <header class="fixed-top-section">
     <StatusBar />
     <WeatherCard />
@@ -30,14 +42,62 @@
       {selectedDate} 
       bind:showForm={showUserEventForm} 
     />
+    
     <Almanac {selectedDate} />
     <ZodiacFortune {selectedDate} />
-  </section>
 
-  <PwaInstallPrompt />
+  <PwaInstallPrompt />  
+  </section>
+{:else}
+    <NewsLiveView 
+      onBack={() => currentView = 'main'} 
+      {isOnline}
+    />
+  {/if}
+
+  
 </main>
 
 <style>
+
+/* 侧边简讯按钮：固定在左侧 */
+  .side-news-trigger {
+    position: fixed;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 99;
+    background: rgba(51, 51, 51, 0.9);
+    color: white;
+    padding: 12px 6px;
+    border: none;
+    border-radius: 0 12px 12px 0;
+    font-size: 12px;
+    writing-mode: vertical-rl; /* 文字竖排 */
+    letter-spacing: 2px;
+    cursor: pointer;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pulse-dot {
+    width: 6px;
+    height: 6px;
+    background: #34c759;
+    border-radius: 50%;
+    margin-bottom: 4px;
+    box-shadow: 0 0 0 rgba(52, 199, 89, 0.4);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(52, 199, 89, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0); }
+  }
+
   /* --- 全局重置与基础设置 --- */
   :global(html, body) {
     margin: 0;
