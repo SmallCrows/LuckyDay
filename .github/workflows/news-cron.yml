@@ -1,0 +1,36 @@
+name: 资讯雷达自动化
+
+on:
+  schedule:
+    # 每 2 小时执行一次 (UTC 时间，Cron 表达式)
+    - cron: '0 */2 * * *'
+  workflow_dispatch: # 允许你在 GitHub 网页上手动点击运行
+
+jobs:
+  build-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v3
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 执行 AI 嗅探脚本
+        env:
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node agent.js
+
+      - name: 提交并推送到仓库
+        run: |
+          git config --global user.name 'AI-Agent'
+          git config --global user.email 'agent@yourdomain.com'
+          git add public/news_music.json
+          git commit -m "auto: 更新音乐简讯" || exit 0
+          git push
