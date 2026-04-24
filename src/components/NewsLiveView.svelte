@@ -2,16 +2,17 @@
   import { onMount } from 'svelte';
   let { onBack, isOnline } = $props();
 
-  // 1. 分类与订阅逻辑
-  const allCategories = [
-    { id: 'finance', label: '金融' },
-    { id: 'tech', label: '科技' },
-    { id: 'music', label: '音乐' },
-    { id: 'energy', label: '能源' },
-    { id: 'alert', label: '预警' }
-  ];
+const allCategories = [
+  { id: 'music', label: '音乐' },
+  { id: 'anime', label: '动漫' },
+  { id: 'novel', label: '小说' },
+  { id: 'tech', label: '科技' },
+  { id: 'movie', label: '电影' },
+  { id: 'travel', label: '旅行' }
+];
 
-  let subscribedIds = $state(['finance', 'tech', 'music']); // 用户订阅的 ID
+  // 同时确保 subscribedIds 的初始状态包含了这些新 ID
+  let subscribedIds = $state(['music', 'anime', 'novel', 'tech', 'movie', 'travel']);
   let activeTab = $state('all'); // 当前选中的标签
   let searchQuery = $state(''); // 搜索框内容
   let showSettings = $state(false); // 是否显示订阅设置面板
@@ -37,7 +38,7 @@
       isLoading = true;
       // 生产环境下，由于 json 放在 public 目录下，可以直接通过绝对路径请求
       // 添加时间戳防止浏览器缓存旧的 JSON
-      const res = await fetch(`/news_music.json?t=${Date.now()}`);
+      const res = await fetch(`/news_all.json?t=${Date.now()}`);
       if (!res.ok) throw new Error('数据拉取失败');
       
       const aiData = await res.json();
