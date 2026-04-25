@@ -5,7 +5,6 @@
   // 增加页面状态： 'loading' | 'success' | 'failed'
   let viewState = $state('loading'); 
   let manualCityName = $state('');
-
   let weather = $state({
     city: '--',
     today: { text: '--', temp: '--°C', humidity: '--%', uv: '--', icon: '⛅' },
@@ -56,7 +55,11 @@
         
         viewState = 'success'; // 切换到成功视图
 
-        // 更新缓存
+        // --- 持久化升级核心 ---
+        // 1. 将确认有效的城市 ID 死死钉在本地（永久有效，直到用户主动更改）
+        localStorage.setItem('user_preferred_location', targetLocationId);
+
+        // 2. 更新天气数据缓存（1小时有效）
         localStorage.setItem('weather_auto_cache', JSON.stringify({
           timestamp: Date.now(),
           data: weather
@@ -68,8 +71,9 @@
     }
   }
 
-  // 初始化获取逻辑 (尝试 IP 定位)
+  // 初始化获取逻辑 (加入持久化判定)
   async function initWeather() {
+    // 优先级 1：读取1小时内的天气缓存
     const cachedString = localStorage.getItem('weather_auto_cache');
     if (cachedString) {
       const cacheData = JSON.parse(cachedString);
@@ -80,19 +84,34 @@
       }
     }
 
+    // 优先级 2：天气过期了，但之前有保存过定位，直接用存好的城市 ID 刷新，绝不弹窗
+    const savedLocationId = localStorage.getItem('user_preferred_location');
+    if (savedLocationId) {
+      await fetchWeatherDataByLocation(savedLocationId);
+      return; 
+    }
+
+    // 优先级 3：完全是个新用户，尝试 IP 隐式定位
     try {
       const ipRes = await fetch('https://api.ipify.org?format=json');
       const { ip } = await ipRes.json();
       await fetchWeatherDataByLocation(ip);
     } catch (error) {
       console.warn('IP嗅探失败，进入手动模式', error);
-      viewState = 'failed'; // IP 被拦截，直接展示备用 UI
+      viewState = 'failed'; // IP 被拦截，直接展示备用 UI，让用户自己选
     }
+  }
+
+  // 主动重置定位功能
+  function resetLocation() {
+    localStorage.removeItem('user_preferred_location');
+    localStorage.removeItem('weather_auto_cache');
+    manualCityName = '';
+    viewState = 'failed'; // 强制退回手动/授权设置面板
   }
 
   // --- 备选方案 1：请求 GPS 权限 ---
   function requestGPS() {
-    // 1. 前置安全环境检查 (HTTPS 或 localhost)
     if (window.isSecureContext === false) {
       alert("开发环境限制：苹果设备要求必须在 HTTPS 下才能弹窗获取定位。\n\n请先使用“手动输入”测试功能。");
       viewState = 'failed';
@@ -103,7 +122,7 @@
       alert("您的浏览器不支持系统定位");
       return;
     }
-    viewState = 'Loading';
+    viewState = 'loading';
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -112,8 +131,6 @@
       },
       (error) => {
         console.warn("定位失败原因:", error);
-        
-        // 2. 细分错误类型，给出有价值的用户引导
         if (error.code === 1) { // PERMISSION_DENIED
           alert("无法获取定位。\n\n如果您想使用自动定位，请前往手机的【设置 -> 隐私与安全性 -> 定位服务 -> Safari浏览器】中，将权限改为“询问”或“使用App时”。");
         } else if (error.code === 2) { // POSITION_UNAVAILABLE
@@ -123,14 +140,13 @@
         } else {
           alert("定位失败，请手动输入城市。");
         }
-        
-        viewState = 'Failed';
+        viewState = 'failed';
       },
-      // 3. 增加请求配置，提高获取几率
+      // 优化参数：降低精度要求，避免手机疯狂搜索卫星导致弹窗慢或失败
       {
-        enableHighAccuracy: true, // 尝试高精度
-        timeout: 10000,           // 10秒超时限制
-        maximumAge: 0             // 强制获取最新位置，不用缓存
+        enableHighAccuracy: false, 
+        timeout: 10000,           
+        maximumAge: 60000             
       }
     );
   }
@@ -153,7 +169,9 @@
   {#if viewState === 'success'}
     <div class="day-panel">
       <div class="header-row">
-        <span class="day-title">今日 · {weather.city}</span>
+        <span class="day-title clickable" onclick={resetLocation} title="点击修改位置">
+          今日 · {weather.city} <span class="edit-icon">📍</span>
+        </span>
         <span class="details">湿度 {weather.today.humidity} &nbsp;辐射 {weather.today.uv}</span>
       </div>
       <div class="main-row">
@@ -163,6 +181,7 @@
       </div>
     </div>
     <div class="divider"></div>
+    
     <div class="day-panel tomorrow">
       <div class="header-row">
         <span class="day-title">明日</span>
@@ -178,6 +197,7 @@
   {:else if viewState === 'failed'}
     <div class="fallback-panel">
       <div class="fallback-msg">无法获取位置，请选择：</div>
+  
       <div class="fallback-actions">
         <button class="gps-btn" onclick={requestGPS}>获取定位权限</button>
         <span class="or-text">或</span>
@@ -210,12 +230,25 @@
     min-height: 52px; /* 保证卡片有基础高度 */
   }
 
-  /* --- 正常天气卡片样式 (保持不变) --- */
+  /* --- 正常天气卡片样式 --- */
   .day-panel { flex: 1; display: flex; flex-direction: column; justify-content: center; }
   .day-panel.tomorrow { opacity: 0.85; }
   .divider { width: 1px; background-color: #f0f0f0; margin: 0 12px; }
   .header-row { display: flex; align-items: center; margin-bottom: 6px; }
+  
   .day-title { font-size: 12px; color: #888888; font-weight: 500; }
+  
+  /* 为修改定位添加的交互样式 */
+  .day-title.clickable {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: opacity 0.2s;
+  }
+  .day-title.clickable:active { opacity: 0.6; }
+  .edit-icon { font-size: 10px; opacity: 0.7; }
+
   .details { flex: 1; text-align: center; font-size: 10px; color: #888888; }
   .main-row { display: flex; align-items: center; gap: 8px; }
   .icon { font-size: 22px; line-height: 1; }
