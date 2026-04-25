@@ -1,4 +1,4 @@
-name: 资讯雷达自动化
+name: 简讯AI自动化
 
 on:
   schedule:
@@ -31,6 +31,6 @@ jobs:
         run: |
           git config --global user.name 'AI-Agent'
           git config --global user.email 'agent@yourdomain.com'
-          git add public/news_music.json
-          git commit -m "auto: 更新音乐简讯" || exit 0
+          git add public/news_all.json
+          git commit -m "auto: 更新简讯" || exit 0
           git push
