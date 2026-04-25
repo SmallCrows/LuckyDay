@@ -350,7 +350,14 @@ const allCategories = [
     text-transform: uppercase;
   }
 
-  .node-content p { font-size: 14px; color: #333; line-height: 1.6; margin: 0; }
+  .node-content p { 
+  font-size: 14px; 
+  color: #333; 
+  line-height: 1.6; 
+  margin: 0; 
+  text-align: left; /* 强制左对齐，阻断外部继承 */
+  word-break: break-all; /* 防止长英文或链接破坏排版 */
+  }
 
   .empty-state { text-align: center; padding: 40px; color: #ccc; font-size: 14px; }
 
