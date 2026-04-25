@@ -25,6 +25,7 @@ jobs:
         env:
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: node agent.js
 
       - name: 提交并推送到仓库
