@@ -37,7 +37,10 @@
   </header>
 
   <section class="scrollable-bottom-section">
+  <!--
     <AlertBanner />
+    -->
+    
     <UserEvents 
       {selectedDate} 
       bind:showForm={showUserEventForm} 

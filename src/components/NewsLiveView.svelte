@@ -4,11 +4,10 @@
 
 const allCategories = [
   { id: 'music', label: '音乐' },
-  { id: 'anime', label: '动漫' },
   { id: 'novel', label: '小说' },
   { id: 'tech', label: '科技' },
   { id: 'movie', label: '电影' },
-  { id: 'travel', label: '旅行' }
+  { id: 'focus', label: '焦点' }
 ];
 
   // 同时确保 subscribedIds 的初始状态包含了这些新 ID
