@@ -68,7 +68,7 @@
     position: fixed;
     left: 0;
     /* 使用 max() 函数完美适配 iPhone/Android 刘海屏，16px 是基础高度，你可以根据你的导航栏实际高度微调这个值 */
-    top: max(16px, env(safe-area-inset-top)); 
+    top: max(0, env(safe-area-inset-top)); 
     z-index: 9999; /* 层级拉满，防止被日历或天气卡片遮挡 */
 
     background: rgba(51, 51, 51, 0.9);
