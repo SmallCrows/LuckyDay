@@ -12,10 +12,10 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 const CHANNELS = [
-  // { id: 'music', name: '音乐', query: '华语 独立音乐 新闻 OR 巡演 OR 新专辑' },
-  // { id: 'novel', name: '小说', query: '网文资讯 OR 奇幻小说出版 OR 文学奖项' },
-  // { id: 'tech',  name: '科技', query: 'AI前沿技术 OR 消费电子新品发布' },
-  // { id: 'movie', name: '电影', query: '院线新片定档 OR 国际电影节获奖' },
+  { id: 'music', name: '音乐', query: '华语 独立音乐 新闻 OR 巡演 OR 新专辑' },
+  { id: 'novel', name: '小说', query: '网文资讯 OR 奇幻小说出版 OR 文学奖项' },
+  { id: 'tech',  name: '科技', query: 'AI前沿技术 OR 消费电子新品发布' },
+  { id: 'movie', name: '电影', query: '院线新片定档 OR 国际电影节获奖' },
   { id: 'focus', name: '焦点', query: '全球重大事件 OR 战争简讯 OR 突发重大新闻' }
 ];
 
@@ -118,7 +118,7 @@ async function fetchChannelData(channel) {
     `[${index+1}] ${item.title}: ${item.snippet}`
   ).join('\n');
 
-  if (!rawContext) return ["数据断层，暂无热点"];
+  if (!rawContext) return ["..."];
 
   // 严格限定 JSON 对象的键名结构，防范格式突变
 // 注入高信息密度的快讯提炼逻辑

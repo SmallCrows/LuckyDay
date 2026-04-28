@@ -32,34 +32,37 @@ const allCategories = [
   let lastUpdated = $state(''); // 用来显示数据的最后更新时间
 
   // 核心拉取逻辑
+  // 核心拉取逻辑
   async function fetchRealNews() {
     try {
       isLoading = true;
-      // 生产环境下，由于 json 放在 public 目录下，可以直接通过绝对路径请求
-      // 添加时间戳防止浏览器缓存旧的 JSON
       const res = await fetch(`/news_all.json?t=${Date.now()}`);
       if (!res.ok) throw new Error('数据拉取失败');
       
       const aiData = await res.json();
       
-      // 保存更新时间
       if (aiData.lastUpdated) {
         const date = new Date(aiData.lastUpdated);
         lastUpdated = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
       }
 
-      // 将 AI 吐出的格式 {"music": ["新闻1"], "tech": ["新闻2"]} 
-      // 转换为我们 UI 需要的扁平化数组格式：[{ time, content, type }]
+      // 获取基准时间戳（如果没有记录，就用当前时间）
+      const baseTimestamp = aiData.lastUpdated ? new Date(aiData.lastUpdated).getTime() : Date.now();
       let formattedNews = [];
       
       for (const [category, newsArray] of Object.entries(aiData)) {
         if (category === 'lastUpdated') continue; 
         
-        // 如果数据是数组，遍历转换
         if (Array.isArray(newsArray)) {
           newsArray.forEach(text => {
+            // 魔法在这里：为每一条新闻生成一个“过去 12 小时内”的随机偏移量
+            // 12小时 = 12 * 60 * 60 * 1000 毫秒 = 43200000
+            const randomOffset = Math.floor(Math.random() * 43200000);
+            const simulatedDate = new Date(baseTimestamp - randomOffset);
+            
             formattedNews.push({
-              time: lastUpdated || '最新', // 简易处理：用更新时间作为新闻时间
+              rawTime: simulatedDate.getTime(), // 隐藏字段，专用于精准排序
+              time: `${simulatedDate.getHours().toString().padStart(2, '0')}:${simulatedDate.getMinutes().toString().padStart(2, '0')}`,
               content: text,
               type: category
             });
@@ -67,7 +70,9 @@ const allCategories = [
         }
       }
 
-      // 更新到状态中
+      // 根据时间戳倒序排列（最新的在最上面），彻底打乱频道的顺序，形成真实信息流
+      formattedNews.sort((a, b) => b.rawTime - a.rawTime);
+
       rawNews = formattedNews;
       
     } catch (error) {
@@ -77,6 +82,7 @@ const allCategories = [
     }
   }
 
+  
   onMount(() => {
     fetchRealNews();
   });

@@ -170,9 +170,9 @@
     <div class="day-panel">
       <div class="header-row">
         <span class="day-title clickable" onclick={resetLocation} title="点击修改位置">
-          今日 · {weather.city} <span class="edit-icon">📍</span>
+        {weather.city} <span class="edit-icon">📍</span>
         </span>
-        <span class="details">湿度 {weather.today.humidity} &nbsp;辐射 {weather.today.uv}</span>
+        <span class="details">湿度 {weather.today.humidity} &nbsp;紫外线 {weather.today.uv}</span>
       </div>
       <div class="main-row">
         <span class="icon">{weather.today.icon}</span>
@@ -185,7 +185,7 @@
     <div class="day-panel tomorrow">
       <div class="header-row">
         <span class="day-title">明日</span>
-        <span class="details">湿度 {weather.tomorrow.humidity} &nbsp;辐射 {weather.tomorrow.uv}</span>
+        <span class="details">湿度 {weather.tomorrow.humidity} &nbsp;紫外线 {weather.tomorrow.uv}</span>
       </div>
       <div class="main-row">
         <span class="icon">{weather.tomorrow.icon}</span>
