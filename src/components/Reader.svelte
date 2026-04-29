@@ -14,7 +14,11 @@
   let annotations = $state([]); 
   let selectionMenu = $state({ show: false, x: 0, y: 0, text: '', start: 0, end: 0 });
   let noteEditor = $state({ show: false, note: '' }); 
+  
+  // 查看笔记相关的增强状态
   let viewingNote = $state(null); 
+  let isEditingNote = $state(false); // 是否处于编辑模式
+  let editBuffer = $state(''); // 编辑时的临时缓冲区
 
   let textContainer;
 
@@ -74,35 +78,16 @@
 
   function handleSelection() {
     if (noteEditor.show || viewingNote) return;
-
     const selection = window.getSelection();
     const selectedText = selection.toString().trim();
-
     if (selectedText && selectedText.length > 0 && textContainer) {
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
       const offsets = getSelectionOffsets(textContainer);
-
-      const isOverlapping = annotations.some(ann => 
-        (offsets.start < ann.endIndex && offsets.end > ann.startIndex)
-      );
-
-      if (isOverlapping) {
-        selectionMenu.show = false;
-        return; 
-      }
-
-      selectionMenu = {
-        show: true,
-        x: rect.left + rect.width / 2,
-        y: rect.top + window.scrollY - 45,
-        text: selectedText,
-        start: offsets.start,
-        end: offsets.end
-      };
-    } else {
-      selectionMenu.show = false;
-    }
+      const isOverlapping = annotations.some(ann => (offsets.start < ann.endIndex && offsets.end > ann.startIndex));
+      if (isOverlapping) { selectionMenu.show = false; return; }
+      selectionMenu = { show: true, x: rect.left + rect.width / 2, y: rect.top + window.scrollY - 45, text: selectedText, start: offsets.start, end: offsets.end };
+    } else { selectionMenu.show = false; }
   }
 
   function openNoteEditor() {
@@ -112,7 +97,6 @@
 
   async function saveNote() {
     if (!noteEditor.note.trim()) return;
-
     await db.annotations.add({
       bookId: bookId,
       chapterIndex: currentIndex,
@@ -122,10 +106,34 @@
       endIndex: selectionMenu.end,
       createdAt: Date.now()
     });
-
     noteEditor.show = false;
     window.getSelection().removeAllRanges(); 
     await loadAnnotations(); 
+  }
+
+  // --- 增强：更新笔记逻辑 ---
+  async function updateExistingNote() {
+    if (!editBuffer.trim()) return;
+    await db.annotations.update(viewingNote.id, {
+      note: editBuffer.trim()
+    });
+    // 更新完成后，刷新本地显示
+    viewingNote.note = editBuffer.trim();
+    isEditingNote = false;
+    await loadAnnotations();
+  }
+
+  // --- 增强：追加内容逻辑 ---
+  function appendToNote() {
+    isEditingNote = true;
+    const timeStr = new Date().toLocaleString();
+    // 在旧内容后换行，并自动注入时间戳
+    editBuffer = viewingNote.note + `\n\n--- 追加于 ${timeStr} ---\n`;
+  }
+
+  function startEditing() {
+    editBuffer = viewingNote.note;
+    isEditingNote = true;
   }
 
   function cancelNote() {
@@ -133,19 +141,20 @@
     window.getSelection().removeAllRanges();
   }
 
+  function closeViewModal() {
+    viewingNote = null;
+    isEditingNote = false;
+  }
+
   let highlightedHTML = $derived.by(() => {
     if (!book || !book.content[currentIndex]) return '';
     let html = book.content[currentIndex];
-    
     if (!annotations || annotations.length === 0) return html;
-
     const sortedAnns = [...annotations].sort((a, b) => b.startIndex - a.startIndex);
-
     for (const ann of sortedAnns) {
       const before = html.substring(0, ann.startIndex);
       const highlighted = html.substring(ann.startIndex, ann.endIndex);
       const after = html.substring(ann.endIndex);
-      
       html = `${before}<mark class="highlight-mark" data-id="${ann.id}">${highlighted}</mark>${after}`;
     }
     return html;
@@ -157,6 +166,7 @@
       const ann = annotations.find(a => a.id === id);
       if (ann) {
         viewingNote = ann;
+        isEditingNote = false; // 初始进入为查看模式
       }
     }
   }
@@ -164,7 +174,7 @@
   async function deleteNote(id) {
     if (confirm('确定要抹去这条感悟吗？')) {
       await db.annotations.delete(id);
-      viewingNote = null;
+      closeViewModal();
       await loadAnnotations();
     }
   }
@@ -203,11 +213,7 @@
     </footer>
 
     {#if selectionMenu.show}
-      <div 
-        class="selection-toolbar" 
-        style="left: {selectionMenu.x}px; top: {selectionMenu.y}px"
-        transition:fly={{ y: 10, duration: 200 }}
-      >
+      <div class="selection-toolbar" style="left: {selectionMenu.x}px; top: {selectionMenu.y}px" transition:fly={{ y: 10, duration: 200 }}>
         <button onclick={openNoteEditor}>✍️ 记笔记</button>
         <div class="arrow"></div>
       </div>
@@ -217,11 +223,7 @@
       <div class="modal-overlay" transition:fade={{duration: 200}}>
         <div class="note-modal" transition:fly={{y: 20, duration: 200}}>
           <div class="quote-text">「 {selectionMenu.text} 」</div>
-          <textarea 
-            bind:value={noteEditor.note} 
-            placeholder="写下你的感悟..."
-            autofocus
-          ></textarea>
+          <textarea bind:value={noteEditor.note} placeholder="写下你的感悟..." autofocus></textarea>
           <div class="modal-actions">
             <button class="cancel-btn" onclick={cancelNote}>取消</button>
             <button class="save-btn" onclick={saveNote}>存入书卷</button>
@@ -231,14 +233,32 @@
     {/if}
 
     {#if viewingNote}
-      <div class="modal-overlay" transition:fade={{duration: 200}} onclick={() => viewingNote = null}>
-        <div class="note-modal view-mode" onclick={e => e.stopPropagation()} transition:fly={{y: 20, duration: 200}}>
+      <div class="modal-overlay" transition:fade={{duration: 200}} onclick={closeViewModal}>
+        <div class="note-modal" onclick={e => e.stopPropagation()} transition:fly={{y: 20, duration: 200}}>
           <div class="quote-text">「 {viewingNote.selectedText} 」</div>
-          <div class="note-content">{viewingNote.note}</div>
-          <div class="note-meta">记录于 {new Date(viewingNote.createdAt).toLocaleDateString()}</div>
+          
+          {#if isEditingNote}
+            <textarea 
+                class="edit-textarea"
+                bind:value={editBuffer} 
+                placeholder="在此修改或追加你的感悟..." 
+                autofocus
+            ></textarea>
+          {:else}
+            <div class="note-content-display">{viewingNote.note}</div>
+            <div class="note-meta">记录于 {new Date(viewingNote.createdAt).toLocaleDateString()}</div>
+          {/if}
+
           <div class="modal-actions">
-            <button class="del-btn" onclick={() => deleteNote(viewingNote.id)}>擦除</button>
-            <button class="cancel-btn" onclick={() => viewingNote = null}>合上</button>
+            {#if isEditingNote}
+                <button class="cancel-btn" onclick={() => isEditingNote = false}>取消</button>
+                <button class="save-btn" onclick={updateExistingNote}>保存修改</button>
+            {:else}
+                <button class="del-btn" onclick={() => deleteNote(viewingNote.id)}>擦除</button>
+                <button class="secondary-btn" onclick={appendToNote}>追加</button>
+                <button class="secondary-btn" onclick={startEditing}>修改</button>
+                <button class="cancel-btn" onclick={closeViewModal}>合上</button>
+            {/if}
           </div>
         </div>
       </div>
@@ -247,190 +267,66 @@
 </div>
 
 <style>
-  /* --- 全局阅读器主题配色：古纸墨香 --- */
-  .reader-container {
-    position: fixed;
-    inset: 0;
-    background-color: #F6F1E3; /* 象牙白纸色，极度护眼 */
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    color: #3A3125; /* 陈墨褐色，降低高对比度疲劳 */
-    user-select: text; 
-  }
-
-  /* --- 导航栏与底部控制栏 --- */
-  .reader-header {
-    display: flex;
-    align-items: center;
-    padding: env(safe-area-inset-top) 16px 12px;
-    background: rgba(246, 241, 227, 0.95);
-    border-bottom: 1px solid #EAE0CA; /* 柔和的边线 */
-    gap: 12px;
-  }
-
+  /* --- 保持原有主题配色 --- */
+  .reader-container { position: fixed; inset: 0; background-color: #F6F1E3; z-index: 1000; display: flex; flex-direction: column; color: #3A3125; user-select: text; }
+  .reader-header { display: flex; align-items: center; padding: env(safe-area-inset-top) 16px 12px; background: rgba(246, 241, 227, 0.95); border-bottom: 1px solid #EAE0CA; gap: 12px; }
   .book-info { flex: 1; display: flex; flex-direction: column; }
-  .book-info .title { font-size: 15px; font-weight: 600; letter-spacing: 1px; }
-  .book-info .chapter-info { font-size: 11px; color: #8A7F72; margin-top: 2px;}
+  .book-info .title { font-size: 15px; font-weight: 600; }
+  .book-info .chapter-info { font-size: 11px; color: #8A7F72; }
+  .controls button { background: transparent; border: 1px solid #D1C5B4; color: #5A4F43; border-radius: 6px; padding: 4px 10px; margin-left: 6px; font-size: 13px; }
 
-  .controls button {
-    background: transparent;
-    border: 1px solid #D1C5B4;
-    color: #5A4F43;
-    border-radius: 6px;
-    padding: 4px 10px;
-    margin-left: 6px;
-    font-size: 13px;
-    cursor: pointer;
-  }
+  .content-area { flex: 1; overflow-y: auto; padding: 35px 28px; line-height: 2; text-align: justify; }
+  .text-wrapper { white-space: pre-wrap; min-height: 100%; letter-spacing: 1px; }
 
-  /* --- 正文排版 --- */
-  .content-area {
-    flex: 1;
-    overflow-y: auto;
-    padding: 35px 28px;
-    line-height: 2; /* 增大行高，让古文留白更多 */
-    text-align: justify;
-    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", serif;
-  }
-
-  .text-wrapper {
-    white-space: pre-wrap; 
-    min-height: 100%;
-    letter-spacing: 1px; /* 增加字间距，呼吸感 */
-  }
-
-  /* 动态高亮标签：朱砂色 */
-  :global(.highlight-mark) {
-    background-color: rgba(189, 102, 83, 0.15); /* 淡淡的朱砂背景 */
-    border-bottom: 2px solid rgba(189, 102, 83, 0.6); /* 朱砂下划线 */
-    color: inherit;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    padding: 2px 0;
-  }
-  :global(.highlight-mark:active) {
-    background-color: rgba(189, 102, 83, 0.3);
-  }
-
-  /* --- 底部翻页栏 --- */
-  .reader-footer {
-    display: flex;
-    align-items: center;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-    border-top: 1px solid #EAE0CA;
-    background: rgba(246, 241, 227, 0.95);
-    gap: 15px;
-  }
-
-  .reader-footer button {
-    background: #EAE0CA;
-    color: #5A4F43;
-    border: none;
-    padding: 8px 18px;
-    border-radius: 20px;
-    font-size: 13px;
-    cursor: pointer;
-    font-weight: 500;
-  }
-  .reader-footer button:disabled { opacity: 0.3; cursor: not-allowed; }
-
-  .progress-bar { flex: 1; height: 4px; background: #EAE0CA; border-radius: 2px; overflow: hidden; }
-  .progress-inner { height: 100%; background: #8B7965; transition: width 0.3s; }
-
-  /* --- 悬浮菜单 --- */
-  .selection-toolbar {
-    position: absolute;
-    transform: translateX(-50%);
-    background: #2C2822; /* 深墨色 */
-    border-radius: 8px;
-    padding: 4px;
-    display: flex;
-    z-index: 2000;
-    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
-  }
-  .selection-toolbar button { background: transparent; border: none; color: #F6F1E3; padding: 6px 14px; font-size: 13px; cursor: pointer; }
-  .selection-toolbar .arrow { position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid #2C2822; }
+  :global(.highlight-mark) { background-color: rgba(189, 102, 83, 0.15); border-bottom: 2px solid rgba(189, 102, 83, 0.6); color: inherit; cursor: pointer; padding: 2px 0; }
   
-  .loading { display: flex; height: 100%; align-items: center; justify-content: center; color: #8A7F72; }
-  .icon-btn { background: none; border: none; font-size: 22px; color: #5A4F43; cursor: pointer; }
+  .reader-footer { display: flex; align-items: center; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid #EAE0CA; background: rgba(246, 241, 227, 0.95); gap: 15px; }
+  .reader-footer button { background: #EAE0CA; color: #5A4F43; border: none; padding: 8px 18px; border-radius: 20px; font-size: 13px; }
+  .progress-bar { flex: 1; height: 4px; background: #EAE0CA; border-radius: 2px; overflow: hidden; }
+  .progress-inner { height: 100%; background: #8B7965; }
 
   /* --- 模态框样式优化 --- */
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5); /* 加深背景遮罩，突出输入框 */
-    backdrop-filter: blur(3px);
-    z-index: 3000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(3px); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .note-modal { background: #ffffff; width: 100%; max-width: 400px; border-radius: 12px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+  .quote-text { font-size: 14px; color: #5A4F43; font-style: italic; border-left: 4px solid #BD6653; padding-left: 12px; margin-bottom: 16px; background: #FDFDFD; }
 
-  .note-modal {
-    background: #ffffff; /* 保持纯白底色，确保极高对比度和清晰度 */
+  /* 查看模式内容显示 */
+  .note-content-display {
+    font-size: 16px;
+    color: #222222;
+    line-height: 1.7;
+    margin-bottom: 12px;
+    white-space: pre-wrap; /* 保证换行和追加的时间戳能正确显示 */
+    max-height: 250px;
+    overflow-y: auto;
+  }
+  .note-meta { font-size: 11px; color: #999; margin-bottom: 16px; }
+
+  /* 编辑模式输入框 */
+  textarea, .edit-textarea {
     width: 100%;
-    max-width: 400px;
-    border-radius: 12px;
-    padding: 24px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-  }
-
-  .quote-text {
-    font-size: 14px;
-    color: #5A4F43;
-    font-style: italic;
-    border-left: 4px solid #BD6653; /* 朱砂色引言线 */
-    padding-left: 12px;
-    margin-bottom: 20px;
-    line-height: 1.6;
-    background: #FDFDFD;
-  }
-
-  .note-modal textarea {
-    width: 100%;
-    height: 140px;
+    height: 160px;
     border: 1px solid #EAE0CA;
     border-radius: 8px;
     padding: 14px;
     font-size: 15px;
     line-height: 1.6;
-    color: #333333; /* 核心修复：强制文字为深色，绝不会再出现白字 */
-    resize: none;
-    outline: none;
+    color: #333333;
     background: #FAFAFA;
+    outline: none;
     box-sizing: border-box;
-    transition: border-color 0.2s;
+    margin-bottom: 10px;
   }
-  .note-modal textarea:focus { border-color: #BD6653; } /* 焦点色也是朱砂 */
+  textarea:focus { border-color: #BD6653; }
 
-  .view-mode .note-content {
-    font-size: 16px;
-    color: #222222;
-    line-height: 1.7;
-    margin-bottom: 12px;
-    font-weight: 500;
-  }
-  .note-meta { font-size: 12px; color: #999; margin-bottom: 24px; }
-
-  .modal-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    margin-top: 16px;
-  }
-
-  .modal-actions button {
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-size: 14px;
-    border: none;
-    cursor: pointer;
-    font-weight: 500;
-  }
+  .modal-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .modal-actions button { padding: 8px 14px; border-radius: 6px; font-size: 13px; border: none; cursor: pointer; font-weight: 500; }
   
   .cancel-btn { background: #F0F0F0; color: #666; }
-  .save-btn { background: #8B7965; color: #fff; } /* 与进度条同色的深褐 */
+  .save-btn { background: #8B7965; color: #fff; }
+  .secondary-btn { background: #EAE0CA; color: #5A4F43; }
   .del-btn { background: #FFF0F0; color: #FF3B30; }
+
+  .selection-toolbar { position: absolute; transform: translateX(-50%); background: #2C2822; border-radius: 8px; padding: 4px; display: flex; z-index: 2000; box-shadow: 0 6px 16px rgba(0,0,0,0.2); }
+  .selection-toolbar button { background: transparent; border: none; color: #F6F1E3; padding: 6px 14px; font-size: 13px; }
 </style>
