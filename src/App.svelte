@@ -9,43 +9,44 @@
   import UserEvents from './components/UserEvents.svelte';
   import PwaInstallPrompt from './components/PwaInstallPrompt.svelte';
   import NewsLiveView from './components/NewsLiveView.svelte';
-  import Bookshelf from './components/Bookshelf.svelte'; // 新增：引入书架组件
-  import Reader from './components/Reader.svelte'; // 新增：引入书架组件
+  import Bookshelf from './components/Bookshelf.svelte';
+  import Reader from './components/Reader.svelte'; // 确保引入了阅读器
 
   // 初始化本地数据库
   import { onMount } from 'svelte';
   import { initDatabaseIfNeeded } from './lib/db';
 
   onMount(async () => {
-    // PWA 启动时静默检查并初始化数据库
     await initDatabaseIfNeeded();
   });
 
-  // 视图控制器增加 'bookshelf' 状态
-  let currentView = $state('main'); // 'main' | 'news' | 'bookshelf'
-  
+  let currentView = $state('main'); // 'main' | 'news' | 'bookshelf' | 'reader'
   let selectedDate = $state(new Date());
   let showUserEventForm = $state(false); 
+  let selectedBookId = $state(null);
 
   let isOnline = $state(true);
 
-
-  let selectedBookId = $state(null); // 记录当前正在阅读的书籍 ID
-
- 
+  // 打开书籍的处理函数
+  function openBook(id) {
+    selectedBookId = id;
+    currentView = 'reader';
+  }
 </script>
 
 <main class="app-container">
 
 {#if currentView === 'main'}
-    <button class="side-news-trigger" onclick={() => currentView = 'news'}>
-      <span class="pulse-dot"></span>
-      简讯
-    </button>
+    <div class="side-trigger-group">
+      <button class="side-news-trigger" onclick={() => currentView = 'news'}>
+        <span class="pulse-dot"></span>
+        简讯
+      </button>
 
-    <button class="side-books-trigger" onclick={() => currentView = 'bookshelf'}>
-      典籍
-    </button>
+      <button class="side-books-trigger" onclick={() => currentView = 'bookshelf'}>
+        典籍
+      </button>
+    </div>
 
   <header class="fixed-top-section">
     <StatusBar />
@@ -75,10 +76,7 @@
 {:else if currentView === 'bookshelf'}
     <Bookshelf 
       onBack={() => currentView = 'main'} 
-      onOpenBook={(id) => {
-        selectedBookId = id;    // 1. 记录选了哪本书
-        currentView = 'reader'; // 2. 切换到阅读器视图
-      }} 
+      onOpenBook={openBook} 
     />
 
 {:else if currentView === 'reader'}
@@ -87,16 +85,18 @@
       onBack={() => currentView = 'bookshelf'} 
     />
 {/if}
+  
 </main>
 
 <style>
-  /* --- 侧边悬浮按钮 --- */
+  /* --- 侧边悬浮按钮组 (均靠左对齐) --- */
   
-  /* 左侧简讯按钮 */
+  /* 简讯按钮 */
   .side-news-trigger {
     position: fixed;
     left: 0;
-    top: max(0px, env(safe-area-inset-top)); 
+    /* 适配安全区，起始高度 */
+    top: max(20px, calc(env(safe-area-inset-top) + 10px)); 
     z-index: 9999;
     background: rgba(51, 51, 51, 0.9);
     color: white;
@@ -113,22 +113,23 @@
     gap: 6px;
   }
 
-  /* 右侧典籍按钮 (新增) */
+  /* 典籍按钮：位置移动到左侧，top 值增加偏移量以排在简讯下方 */
   .side-books-trigger {
     position: fixed;
-    right: 0;
-    top: max(0px, env(safe-area-inset-top)); 
+    left: 0;
+    /* 简讯按钮高度 + 间距，约 80px 的总偏移 */
+    top: calc(max(20px, calc(env(safe-area-inset-top) + 10px)) + 80px); 
     z-index: 9999;
-    background: rgba(105, 89, 75, 0.95); /* 采用古典的深褐/墨色 */
+    background: rgba(105, 89, 75, 0.95); /* 古典墨色 */
     color: #fcfbf9;
     padding: 12px 6px;
     border: none;
-    border-radius: 12px 0 0 12px; /* 圆角在左侧 */
+    border-radius: 0 12px 12px 0; /* 圆角改到右侧，与简讯一致 */
     font-size: 12px;
     writing-mode: vertical-rl; 
     letter-spacing: 2px;
     cursor: pointer;
-    box-shadow: -2px 0 10px rgba(0,0,0,0.15);
+    box-shadow: 2px 0 10px rgba(0,0,0,0.15); /* 阴影改到右侧 */
     display: flex;
     align-items: center;
     gap: 6px;
@@ -150,17 +151,16 @@
     100% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0); }
   }
 
-  /* --- 全局重置与基础设置 --- */
+  /* --- 基础容器设置保持不变 --- */
   :global(html, body) {
     margin: 0;
     padding: 0;
     height: 100%;
     background-color: #f5f5f7; 
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     overflow: hidden; 
   }
 
-  /* --- 骨架布局核心 --- */
   .app-container {
     display: flex;
     flex-direction: column;
@@ -190,21 +190,6 @@
     -webkit-overflow-scrolling: touch;
   }
 
-  /* --- Mac 风格滚动条定制 --- */
-  .scrollable-bottom-section::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .scrollable-bottom-section::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .scrollable-bottom-section::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.15);
-    border-radius: 10px; 
-  }
-
-  .scrollable-bottom-section::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(0, 0, 0, 0.3);
-  }
+  .scrollable-bottom-section::-webkit-scrollbar { width: 6px; }
+  .scrollable-bottom-section::-webkit-scrollbar-thumb { background-color: rgba(0, 0, 0, 0.15); border-radius: 10px; }
 </style>
