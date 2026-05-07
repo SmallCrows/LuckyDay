@@ -268,6 +268,7 @@
   .stat-item {
     display: flex;
     align-items: flex-start;
+    text-align: left; /* 强制左对齐 */
     gap: 12px;
     background: #f9f9fb;
     padding: 10px 12px;
