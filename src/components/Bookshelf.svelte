@@ -132,10 +132,26 @@
   .back-btn { background: transparent; border: none; font-size: 16px; color: #007aff; cursor: pointer; display: flex; align-items: center; }
   .title { font-size: 18px; font-weight: 600; color: #1d1d1f; letter-spacing: 1px; }
   
-  .add-btn { 
-    width: 36px !important; height: 36px !important; flex-shrink: 0 !important;
-    border-radius: 50%; background-color: #1d1d1f; color: #fff; 
-    border: none; font-size: 24px; display: flex; align-items: center; justify-content: center; 
+ .add-btn { 
+    flex: 0 0 36px !important;
+    width: 36px !important; 
+    height: 36px !important;
+    border-radius: 50% !important; 
+    padding: 0 !important;
+    margin: 0 !important;
+    
+    background-color: #1d1d1f; 
+    color: #fff; 
+    border: none; 
+    font-size: 24px; 
+    font-weight: 300;
+    
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    cursor: pointer; 
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15); 
+    -webkit-appearance: none; 
   }
 
   .books-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 24px 16px; }
