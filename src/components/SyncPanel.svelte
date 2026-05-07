@@ -3,7 +3,8 @@
   import { exportDatabase, importDatabase } from '../lib/db';
   import Peer from 'peerjs';
   import QRCode from 'qrcode';
-  import { Html5QrcodeScanner } from 'html5-qrcode';
+  // 核心变更：引入底层的 Html5Qrcode，而不是带 UI 的 Scanner
+  import { Html5Qrcode } from 'html5-qrcode';
   import { fade, slide } from 'svelte/transition';
 
   let { onBack } = $props();
@@ -16,7 +17,9 @@
   
   let peerInstance = null;
   let qrCanvas;
-  let scannerInstance = null;
+  
+  // 核心变更：管理底层扫描器实例
+  let html5QrCode = null;
   let fileInput;
 
   function generateIdentityKey() {
@@ -42,7 +45,6 @@
       QRCode.toCanvas(qrCanvas, myKey, { width: 180, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' } });
     }
 
-    // 注入全矩阵 STUN 服务器，提升 NAT 穿透率
     const cleanMyKey = myKey.replace(/[^A-Z0-9]/gi, '');
     peerInstance = new Peer(`lucky-pwa-${cleanMyKey}`, {
       config: {
@@ -83,7 +85,7 @@
 
   onDestroy(() => {
     if (peerInstance) peerInstance.destroy();
-    if (scannerInstance) scannerInstance.clear();
+    stopScanner(); // 确保组件销毁时关闭摄像头
   });
 
   async function connectAndPull() {
@@ -132,20 +134,49 @@
     });
   }
 
+  // --- 核心变更：纯净的底层硬件调用逻辑 ---
   function startScanner() {
     showScanner = true;
+    
     setTimeout(() => {
-      scannerInstance = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
-      scannerInstance.render((decodedText) => {
+      html5QrCode = new Html5Qrcode("reader");
+      
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      
+      const onScanSuccess = (decodedText) => {
         targetKey = decodedText;
-        scannerInstance.clear();
-        showScanner = false;
+        stopScanner(); // 扫码成功后立刻关闭摄像头
         connectAndPull();
-      }, (err) => {});
+      };
+      const onScanFailure = (err) => { /* 忽略扫描过程中的无帧错误 */ };
+
+      // 1. 优先强制开启后置摄像头 (environment)
+      html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure)
+        .catch(err => {
+          // 2. 如果设备没有后置（比如电脑），自动降级使用前置或默认摄像头 (user)
+          console.log("无法调用后置摄像头，尝试默认摄像头...", err);
+          html5QrCode.start({ facingMode: "user" }, config, onScanSuccess, onScanFailure)
+            .catch(fallbackErr => {
+              alert("无法访问摄像头，请确保已授予权限。");
+              showScanner = false;
+            });
+        });
     }, 100);
   }
 
-  // --- 终极保险：离线文件流转方案 ---
+  // 独立出关闭摄像头的逻辑
+  function stopScanner() {
+    if (html5QrCode) {
+      html5QrCode.stop().then(() => {
+        html5QrCode.clear();
+        html5QrCode = null;
+      }).catch(err => {
+        console.warn("停止摄像头时发生异常", err);
+      });
+    }
+    showScanner = false;
+  }
+
   async function exportToFile() {
     try {
       const data = await exportDatabase();
@@ -181,7 +212,6 @@
       }
     };
     reader.readAsText(file);
-    // 重置 input，允许重复选择同一个文件
     event.target.value = '';
   }
 </script>
@@ -217,7 +247,7 @@
 
       {#if showScanner}
         <div id="reader" class="scanner-box" in:slide></div>
-        <button class="mac-btn secondary full-width" style="margin-top: 10px;" onclick={() => {scannerInstance.clear(); showScanner = false;}}>终止扫描</button>
+        <button class="mac-btn secondary full-width" style="margin-top: 10px;" onclick={stopScanner}>终止扫描</button>
       {:else}
         <div class="input-action-group">
           <input 
@@ -288,5 +318,9 @@
   .mac-btn.secondary { background: #e5e5ea; color: #1d1d1f; }
   .mac-btn.icon-btn { background: #f5f5f7; width: 46px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
   .full-width { width: 100%; }
-  .scanner-box { width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid #d2d2d7; }
+
+  /* 隐藏底部不需要的 html5-qrcode 库自带的控制条 */
+  .scanner-box { width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid #d2d2d7; background: #000; }
+  :global(#reader__dashboard_section_csr) { display: none !important; }
+  :global(#reader__dashboard_section_swaplink) { display: none !important; }
 </style>
