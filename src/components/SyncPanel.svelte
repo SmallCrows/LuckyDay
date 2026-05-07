@@ -8,10 +8,9 @@
 
   let { onBack } = $props();
 
-  // 状态管理
   let myKey = $state('');
   let targetKey = $state('');
-  let status = $state('正在生成身份标识...'); // 界面提示信息
+  let status = $state('正在初始化加密通道...'); 
   let isConnecting = $state(false);
   let showScanner = $state(false);
   
@@ -19,7 +18,6 @@
   let qrCanvas;
   let scannerInstance = null;
 
-  // 1. 指纹码生成算法 (剔除易混淆字符)
   function generateIdentityKey() {
     const chars = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
     let key = '';
@@ -31,9 +29,7 @@
     return `${key.slice(0, 4)}-${key.slice(4, 8)}-${key.slice(8, 12)}`;
   }
 
-  // 初始化设备身份与 PeerJS 监听
   onMount(() => {
-    // 读取或生成专属 Key
     let savedKey = localStorage.getItem('device_sync_key');
     if (!savedKey) {
       savedKey = generateIdentityKey();
@@ -41,32 +37,49 @@
     }
     myKey = savedKey;
 
-    // 绘制二维码
     if (qrCanvas) {
       QRCode.toCanvas(qrCanvas, myKey, { width: 180, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' } });
     }
 
-    // 初始化 PeerJS (加个前缀防止在公共服务器上与别人的应用撞车)
-    peerInstance = new Peer(`lucky-pwa-${myKey.replace(/-/g, '')}`);
+    // 注入强力 STUN 服务器阵列，执行强制 NAT 网络穿透
+    const cleanMyKey = myKey.replace(/[^A-Z0-9]/gi, '');
+    peerInstance = new Peer(`lucky-pwa-${cleanMyKey}`, {
+      config: {
+        'iceServers': [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' }
+        ]
+      }
+    });
     
     peerInstance.on('open', (id) => {
-      status = '设备已就绪，等待连接...';
+      status = '设备已就绪，雷达静默监听中...';
     });
 
-    // --- 核心：被动接收数据逻辑 ---
+    // 接收端底层协议
     peerInstance.on('connection', (conn) => {
-      status = '🔗 发现远端设备，正在建立通道...';
+      status = '🔗 发现远端设备，正在执行网络穿透...';
+      
+      // 必须监听通道彻底打开的事件，确保穿透成功
+      conn.on('open', () => {
+        status = '✅ P2P 通道已锁定，准备接收数据流...';
+      });
+
       conn.on('data', async (data) => {
         if (data.type === 'SYNC_PAYLOAD') {
-          status = '📦 正在接收数据...';
+          status = '📦 高速接收数据并校验...';
           const success = await importDatabase(data.payload);
           if (success) {
-            status = '✅ 同步完成！数据已更新。';
-            setTimeout(() => onBack(), 2000); // 同步成功后自动返回主页
+            status = '✅ 数据覆盖完成，核心重启中...';
+            setTimeout(() => onBack(), 2000); 
           } else {
-            status = '❌ 同步写入失败。';
+            status = '❌ 本地数据库写入发生异常。';
           }
         }
+      });
+
+      conn.on('error', (err) => {
+        status = '❌ 通道崩溃，连接被重置。';
       });
     });
   });
@@ -76,51 +89,50 @@
     if (scannerInstance) scannerInstance.clear();
   });
 
-  // --- 核心：主动发送数据逻辑 ---
+  // 发送端底层协议
   async function connectAndSync() {
     if (!targetKey.trim()) {
-      alert("请输入对方的指纹码"); return;
+      alert("必须输入有效的目标指纹码"); return;
     }
     isConnecting = true;
-    status = '正在打包本地数据...';
+    status = '正在提取本地数据快照...';
     
     const payload = await exportDatabase();
     
-    status = '正在呼叫远端设备...';
-    // 规范化输入的 Key
-    const normalizedTarget = targetKey.replace(/-/g, '').toUpperCase();
-    const conn = peerInstance.connect(`lucky-pwa-${normalizedTarget}`);
+    // 清洗杂质字符，开启高可靠性传输模式
+    const cleanTarget = targetKey.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    status = '定向呼叫目标设备，执行握手协议...';
+    
+    const conn = peerInstance.connect(`lucky-pwa-${cleanTarget}`, {
+      reliable: true 
+    });
 
     conn.on('open', () => {
-      status = '🔗 通道已建立，正在发射数据...';
+      status = '🔗 穿透成功，数据洪流开始发射...';
       conn.send({ type: 'SYNC_PAYLOAD', payload: payload });
       
       setTimeout(() => {
-        status = '✅ 数据发送完毕！';
+        status = '✅ 数据发送完毕，请在目标设备确认。';
         isConnecting = false;
-      }, 1000);
+      }, 1500);
     });
 
     conn.on('error', (err) => {
-      status = '❌ 连接失败，请检查目标设备是否在线。';
+      status = '❌ WebRTC 穿透失败，防火墙拦截或设备离线。';
       isConnecting = false;
     });
   }
 
-  // --- 扫码逻辑 ---
   function startScanner() {
     showScanner = true;
-    // 延迟一点等 DOM 渲染
     setTimeout(() => {
       scannerInstance = new Html5QrcodeScanner("reader", { fps: 10, qrbox: {width: 250, height: 250} }, false);
       scannerInstance.render((decodedText) => {
-        // 扫码成功
         targetKey = decodedText;
         scannerInstance.clear();
         showScanner = false;
-        // 自动触发连接
         connectAndSync();
-      }, (err) => { /* 忽略扫描过程中的错误 */ });
+      }, (err) => {});
     }, 100);
   }
 </script>
@@ -131,13 +143,14 @@
       <svg width="12" height="20" viewBox="0 0 12 20" fill="none"><path d="M10.5 18.5L2 10L10.5 1.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       返回
     </button>
-    <h2 class="title">多端无缝流转</h2>
-    <div style="width: 40px;"></div> </header>
+    <h2 class="title">数据链桥接</h2>
+    <div style="width: 40px;"></div> 
+  </header>
 
   <div class="content-scroll">
     <section class="card my-device-card">
       <h3 class="card-title">本机身份标识</h3>
-      <p class="subtitle">将此设备的数据覆盖到另一台设备，请用另一台设备扫描此码。</p>
+      <p class="subtitle">将此设备的数据覆盖至目标，请用目标设备扫描下方阵列矩阵。</p>
       
       <div class="qr-wrapper">
         <canvas bind:this={qrCanvas}></canvas>
@@ -150,12 +163,12 @@
     </section>
 
     <section class="card target-device-card">
-      <h3 class="card-title">提取云端/远端数据</h3>
-      <p class="subtitle">拉取另一台设备的数据覆盖至本机。</p>
+      <h3 class="card-title">提取远端节点数据</h3>
+      <p class="subtitle">剥离远端数据并强行覆盖本机存储层。</p>
 
       {#if showScanner}
         <div id="reader" class="scanner-box" in:slide></div>
-        <button class="mac-btn secondary full-width" style="margin-top: 10px;" onclick={() => {scannerInstance.clear(); showScanner = false;}}>取消扫描</button>
+        <button class="mac-btn secondary full-width" style="margin-top: 10px;" onclick={() => {scannerInstance.clear(); showScanner = false;}}>终止扫描序列</button>
       {:else}
         <div class="input-action-group">
           <input 
@@ -164,12 +177,12 @@
             bind:value={targetKey} 
             class="mac-input uppercase-input"
           />
-          <button class="mac-btn icon-btn" onclick={startScanner} title="扫码">
+          <button class="mac-btn icon-btn" onclick={startScanner} title="调取光学传感器">
             📷
           </button>
         </div>
         <button class="mac-btn primary full-width" onclick={connectAndSync} disabled={isConnecting}>
-          {isConnecting ? '同步中...' : '拉取并覆盖本机'}
+          {isConnecting ? '协议执行中...' : '建立连接并覆盖本机'}
         </button>
       {/if}
     </section>
@@ -220,9 +233,13 @@
 
   .input-action-group { display: flex; gap: 8px; margin-bottom: 16px; }
   
+  /* 强制视觉覆写层：击碎深色模式污染 */
   .mac-input {
     flex: 1; padding: 12px; border: 1px solid #d2d2d7; border-radius: 8px;
-    font-size: 15px; color: #1d1d1f; outline: none; transition: border-color 0.2s;
+    font-size: 15px; 
+    color: #1d1d1f !important; 
+    background-color: #ffffff !important; 
+    outline: none; transition: border-color 0.2s;
   }
   .mac-input:focus { border-color: #007aff; }
   .uppercase-input { text-transform: uppercase; }
