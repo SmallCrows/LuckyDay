@@ -1,5 +1,6 @@
 <script>
   // 引入子组件
+  import SyncPanel from './components/SyncPanel.svelte';
   import StatusBar from './components/StatusBar.svelte';
   import WeatherCard from './components/WeatherCard.svelte';
   import Calendar from './components/Calendar.svelte';
@@ -46,6 +47,10 @@
       <button class="side-books-trigger" onclick={() => currentView = 'bookshelf'}>
         典籍
       </button>
+
+      <button class="side-sync-trigger" onclick={() => currentView = 'sync'}>
+      同步
+    </button>
     </div>
 
   <header class="fixed-top-section">
@@ -84,7 +89,12 @@
       bookId={selectedBookId} 
       onBack={() => currentView = 'bookshelf'} 
     />
+
+{:else if currentView === 'sync'}
+    <SyncPanel onBack={() => currentView = 'main'} />  
+
 {/if}
+
   
 </main>
 
@@ -133,6 +143,23 @@
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+
+  .side-sync-trigger {
+    position: fixed;
+    left: 0;
+    top: calc(max(20px, calc(env(safe-area-inset-top) + 10px)) + 160px); /* 在典籍下方 */
+    z-index: 9999;
+    background: rgba(0, 122, 255, 0.95); /* 使用 Mac 蓝以区分功能 */
+    color: #ffffff;
+    padding: 12px 6px;
+    border: none;
+    border-radius: 0 12px 12px 0;
+    font-size: 12px;
+    writing-mode: vertical-rl; 
+    letter-spacing: 2px;
+    cursor: pointer;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.15);
   }
 
   .pulse-dot {

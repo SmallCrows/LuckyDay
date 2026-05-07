@@ -69,3 +69,48 @@ export async function initDatabaseIfNeeded() {
     console.error('❌ [数据库错误] 初始化失败:', error);
   }
 }
+
+// --- 同步引擎扩展 ---
+
+// 1. 将所有本地数据打包为一个完整对象
+export async function exportDatabase() {
+  const books = await db.books.toArray();
+  const annotations = await db.annotations.toArray();
+  const events = localStorage.getItem('lucky_day_events'); // 把事件也带上
+  
+  return {
+    timestamp: Date.now(),
+    books: books,
+    annotations: annotations,
+    events: events ? JSON.parse(events) : []
+  };
+}
+
+// 2. 接收外部数据，并安全地覆盖本地
+export async function importDatabase(syncData) {
+  try {
+    // 开启事务，确保写入时如果出错可以回滚
+    await db.transaction('rw', db.books, db.annotations, async () => {
+      // 清空现有数据
+      await db.books.clear();
+      await db.annotations.clear();
+      
+      // 批量写入新数据
+      if (syncData.books && syncData.books.length > 0) {
+        await db.books.bulkAdd(syncData.books);
+      }
+      if (syncData.annotations && syncData.annotations.length > 0) {
+        await db.annotations.bulkAdd(syncData.annotations);
+      }
+    });
+
+    // 覆盖事件记录
+    if (syncData.events) {
+      localStorage.setItem('lucky_day_events', JSON.stringify(syncData.events));
+    }
+    return true;
+  } catch (error) {
+    console.error("数据覆盖失败:", error);
+    return false;
+  }
+}

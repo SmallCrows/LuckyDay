@@ -18,8 +18,11 @@
     "@google/generative-ai": "^0.24.1",
     "dexie": "^4.4.2",
     "dotenv": "^17.4.2",
+    "html5-qrcode": "^2.3.8",
     "lunar-javascript": "^1.7.7",
     "node-fetch": "^3.3.2",
-    "openai": "^6.34.0"
+    "openai": "^6.34.0",
+    "peerjs": "^1.5.5",
+    "qrcode": "^1.5.4"
   }
 }
