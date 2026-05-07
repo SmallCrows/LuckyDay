@@ -17,6 +17,7 @@
   let peerInstance = null;
   let qrCanvas;
   let scannerInstance = null;
+  let fileInput;
 
   function generateIdentityKey() {
     const chars = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
@@ -41,11 +42,14 @@
       QRCode.toCanvas(qrCanvas, myKey, { width: 180, margin: 2, color: { dark: '#1d1d1f', light: '#ffffff' } });
     }
 
+    // 注入全矩阵 STUN 服务器，提升 NAT 穿透率
     const cleanMyKey = myKey.replace(/[^A-Z0-9]/gi, '');
     peerInstance = new Peer(`lucky-pwa-${cleanMyKey}`, {
       config: {
         'iceServers': [
           { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun.qq.com:3478' },
+          { urls: 'stun:stun.miwifi.com:3478' },
           { urls: 'stun:global.stun.twilio.com:3478' }
         ]
       }
@@ -55,7 +59,6 @@
       status = '设备已就绪，雷达静默监听中...';
     });
 
-    // --- 【被动方：持有数据的手机】 ---
     peerInstance.on('connection', (conn) => {
       status = '🔗 远端设备已接入...';
       
@@ -63,20 +66,17 @@
         status = '✅ 通道已锁定，等待远端指令...';
       });
 
-      // 监听远端发来的拉取请求
       conn.on('data', async (data) => {
         if (data.type === 'PULL_REQUEST') {
           status = '📤 远端正在拉取本机数据，打包中...';
-          // 导出本机真实数据
           const payload = await exportDatabase();
-          // 将数据发送给对方
           conn.send({ type: 'SYNC_PAYLOAD', payload: payload });
           status = '✅ 数据已成功发射至远端！';
         }
       });
 
       conn.on('error', (err) => {
-        status = '❌ 通道断开，请重试。';
+        status = '❌ 通道断开。';
       });
     });
   });
@@ -86,35 +86,30 @@
     if (scannerInstance) scannerInstance.clear();
   });
 
-  // --- 【主动方：需要拉取数据的电脑】 ---
   async function connectAndPull() {
     if (!targetKey.trim()) {
-      alert("必须输入有效的目标指纹码"); return;
+      alert("请输入目标指纹码"); return;
     }
     isConnecting = true;
     
     const cleanTarget = targetKey.replace(/[^A-Z0-9]/gi, '').toUpperCase();
-    status = '定向呼叫目标设备，执行握手协议...';
+    status = '定向呼叫目标设备，执行穿透协议...';
     
-    // 核心修复：移除 reliable: true 避免底层死锁
     const conn = peerInstance.connect(`lucky-pwa-${cleanTarget}`);
 
-    // 增加防卡死超时机制（15秒）
     let connectionTimeout = setTimeout(() => {
       if (isConnecting) {
-        status = '❌ 连接超时，请确保双方都在此页面并检查网络。';
+        status = '❌ 穿透失败。网络防火墙拦截，建议使用下方「离线文件流转」。';
         isConnecting = false;
       }
     }, 15000);
 
     conn.on('open', () => {
-      status = '🔗 穿透成功，正在请求目标发送数据...';
-      // 通道一打开，立刻向对方发送“给我数据”的请求
+      status = '🔗 穿透成功，请求目标发送数据...';
       conn.send({ type: 'PULL_REQUEST' });
     });
 
     conn.on('data', async (data) => {
-      // 收到对方传回来的数据库快照
       if (data.type === 'SYNC_PAYLOAD') {
         clearTimeout(connectionTimeout);
         status = '📦 正在接收并解包数据...';
@@ -124,7 +119,7 @@
           status = '✅ 数据覆盖完成，核心重启中...';
           setTimeout(() => onBack(), 1500); 
         } else {
-          status = '❌ 本地数据库写入发生异常。';
+          status = '❌ 本地写入异常。';
         }
         isConnecting = false;
       }
@@ -148,6 +143,46 @@
         connectAndPull();
       }, (err) => {});
     }, 100);
+  }
+
+  // --- 终极保险：离线文件流转方案 ---
+  async function exportToFile() {
+    try {
+      const data = await exportDatabase();
+      const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lucky_sync_${new Date().getTime()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('导出快照失败');
+    }
+  }
+
+  function importFromFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.timestamp) throw new Error("无效的备份文件");
+        const success = await importDatabase(data);
+        if (success) {
+          alert('数据覆盖成功！');
+          onBack();
+        }
+      } catch (err) {
+        alert('解析文件失败，请确保选择了正确的备份文件。');
+      }
+    };
+    reader.readAsText(file);
+    // 重置 input，允许重复选择同一个文件
+    event.target.value = '';
   }
 </script>
 
@@ -177,12 +212,12 @@
     </section>
 
     <section class="card target-device-card">
-      <h3 class="card-title">提取远端节点数据</h3>
+      <h3 class="card-title">无线 P2P 拉取</h3>
       <p class="subtitle">拉取目标设备的数据并覆盖本机。</p>
 
       {#if showScanner}
         <div id="reader" class="scanner-box" in:slide></div>
-        <button class="mac-btn secondary full-width" style="margin-top: 10px;" onclick={() => {scannerInstance.clear(); showScanner = false;}}>终止扫描序列</button>
+        <button class="mac-btn secondary full-width" style="margin-top: 10px;" onclick={() => {scannerInstance.clear(); showScanner = false;}}>终止扫描</button>
       {:else}
         <div class="input-action-group">
           <input 
@@ -191,20 +226,39 @@
             bind:value={targetKey} 
             class="mac-input uppercase-input"
           />
-          <button class="mac-btn icon-btn" onclick={startScanner} title="调取光学传感器">
+          <button class="mac-btn icon-btn" onclick={startScanner} title="调取摄像头">
             📷
           </button>
         </div>
         <button class="mac-btn primary full-width" onclick={connectAndPull} disabled={isConnecting}>
-          {isConnecting ? '协议执行中...' : '建立连接并拉取数据'}
+          {isConnecting ? '穿透执行中...' : '建立连接并拉取'}
         </button>
       {/if}
+    </section>
+
+    <section class="card file-sync-card">
+      <h3 class="card-title">离线文件流转</h3>
+      <p class="subtitle">当 P2P 网络被防火墙阻断时，可直接通过文件导出/导入完成数据转移。</p>
+      <div class="file-action-group">
+        <button class="mac-btn secondary full-width" onclick={exportToFile}>
+          📦 导出本机数据快照
+        </button>
+        <button class="mac-btn secondary full-width" onclick={() => fileInput.click()}>
+          📥 载入外部数据快照
+        </button>
+        <input 
+          type="file" 
+          accept=".json" 
+          bind:this={fileInput} 
+          onchange={importFromFile} 
+          style="display: none;" 
+        />
+      </div>
     </section>
   </div>
 </div>
 
 <style>
-  /* 样式保持不变，确保视觉稳定性 */
   :global(*) { box-sizing: border-box; }
   .sync-container { position: fixed; inset: 0; background-color: #f5f5f7; z-index: 2000; display: flex; flex-direction: column; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
   .header { display: flex; justify-content: space-between; align-items: center; padding: env(safe-area-inset-top) 16px 12px; background: #ffffff; border-bottom: 1px solid #d2d2d7; }
@@ -220,10 +274,14 @@
   .status-bar { text-align: center; font-size: 13px; color: #007aff; }
   .status-bar.success { color: #34c759; }
   .status-bar.error { color: #ff3b30; }
+  
   .input-action-group { display: flex; gap: 8px; margin-bottom: 16px; }
   .mac-input { flex: 1; padding: 12px; border: 1px solid #d2d2d7; border-radius: 8px; font-size: 15px; color: #1d1d1f !important; background-color: #ffffff !important; outline: none; transition: border-color 0.2s; }
   .mac-input:focus { border-color: #007aff; }
   .uppercase-input { text-transform: uppercase; }
+  
+  .file-action-group { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+
   .mac-btn { padding: 12px; border-radius: 8px; font-size: 15px; font-weight: 500; border: none; cursor: pointer; transition: transform 0.1s; }
   .mac-btn:active { transform: scale(0.98); }
   .mac-btn.primary { background: #007aff; color: #ffffff; }
