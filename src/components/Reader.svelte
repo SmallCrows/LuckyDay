@@ -15,12 +15,15 @@
   let selectionMenu = $state({ show: false, x: 0, y: 0, text: '', start: 0, end: 0 });
   let noteEditor = $state({ show: false, note: '' }); 
   
-  // 查看笔记相关的增强状态
   let viewingNote = $state(null); 
-  let isEditingNote = $state(false); // 是否处于编辑模式
-  let editBuffer = $state(''); // 编辑时的临时缓冲区
+  let isEditingNote = $state(false);
+  let editBuffer = $state('');
 
   let textContainer;
+
+  // --- 滑动手势追踪变量 ---
+  let touchStartX = 0;
+  let touchStartY = 0;
 
   async function loadBook() {
     isLoading = true;
@@ -90,6 +93,40 @@
     } else { selectionMenu.show = false; }
   }
 
+  // --- 核心：触摸开始 ---
+  function handleTouchStart(e) {
+    if (e.touches.length > 1) return; // 忽略多指触控
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }
+
+  // --- 核心：触摸结束与翻页判定 ---
+  function handleTouchEnd(e) {
+    // 1. 优先执行划线判定
+    handleSelection();
+
+    // 2. 如果当前正在写笔记、看笔记，或者用户刚好选中了文字，绝对禁止翻页
+    if (noteEditor.show || viewingNote) return;
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) return;
+
+    // 3. 计算滑动向量
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+    
+    const deltaX = touchStartX - touchEndX; // > 0 表示向左滑
+    const deltaY = touchStartY - touchEndY;
+
+    // 4. 防误触阈值：水平滑动必须大于 50px，且水平偏移量必须是垂直偏移量的 1.5 倍以上（防止对角线或上下滚动误触发）
+    if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+      if (deltaX > 0) {
+        nextPage(); // 向左滑 -> 阅读下一章
+      } else {
+        prevPage(); // 向右滑 -> 回到上一章
+      }
+    }
+  }
+
   function openNoteEditor() {
     selectionMenu.show = false; 
     noteEditor = { show: true, note: '' };
@@ -111,23 +148,19 @@
     await loadAnnotations(); 
   }
 
-  // --- 增强：更新笔记逻辑 ---
   async function updateExistingNote() {
     if (!editBuffer.trim()) return;
     await db.annotations.update(viewingNote.id, {
       note: editBuffer.trim()
     });
-    // 更新完成后，刷新本地显示
     viewingNote.note = editBuffer.trim();
     isEditingNote = false;
     await loadAnnotations();
   }
 
-  // --- 增强：追加内容逻辑 ---
   function appendToNote() {
     isEditingNote = true;
     const timeStr = new Date().toLocaleString();
-    // 在旧内容后换行，并自动注入时间戳
     editBuffer = viewingNote.note + `\n\n--- 追加于 ${timeStr} ---\n`;
   }
 
@@ -166,7 +199,7 @@
       const ann = annotations.find(a => a.id === id);
       if (ann) {
         viewingNote = ann;
-        isEditingNote = false; // 初始进入为查看模式
+        isEditingNote = false; 
       }
     }
   }
@@ -180,7 +213,12 @@
   }
 </script>
 
-<div class="reader-container" onmouseup={handleSelection} ontouchend={handleSelection}>
+<!-- 将触摸事件绑定到最外层容器 -->
+<div class="reader-container" 
+     onmouseup={handleSelection} 
+     ontouchstart={handleTouchStart} 
+     ontouchend={handleTouchEnd}>
+  
   {#if isLoading}
     <div class="loading">正在开启卷轴...</div>
   {:else if book}
@@ -198,6 +236,7 @@
 
     <article class="content-area" style="font-size: {fontSize}px" onclick={handleTextClick}>
       {#key currentIndex}
+        <!-- 左右滑动切换页面时的动画效果过渡 -->
         <div in:fade={{ duration: 400 }} class="text-wrapper" bind:this={textContainer}>
           {@html highlightedHTML}
         </div>
@@ -267,7 +306,6 @@
 </div>
 
 <style>
-  /* --- 保持原有主题配色 --- */
   .reader-container { position: fixed; inset: 0; background-color: #F6F1E3; z-index: 1000; display: flex; flex-direction: column; color: #3A3125; user-select: text; }
   .reader-header { display: flex; align-items: center; padding: env(safe-area-inset-top) 16px 12px; background: rgba(246, 241, 227, 0.95); border-bottom: 1px solid #EAE0CA; gap: 12px; }
   .book-info { flex: 1; display: flex; flex-direction: column; }
@@ -283,40 +321,16 @@
   .reader-footer { display: flex; align-items: center; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid #EAE0CA; background: rgba(246, 241, 227, 0.95); gap: 15px; }
   .reader-footer button { background: #EAE0CA; color: #5A4F43; border: none; padding: 8px 18px; border-radius: 20px; font-size: 13px; }
   .progress-bar { flex: 1; height: 4px; background: #EAE0CA; border-radius: 2px; overflow: hidden; }
-  .progress-inner { height: 100%; background: #8B7965; }
+  .progress-inner { height: 100%; background: #8B7965; transition: width 0.3s; }
 
-  /* --- 模态框样式优化 --- */
   .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(3px); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 20px; }
   .note-modal { background: #ffffff; width: 100%; max-width: 400px; border-radius: 12px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
   .quote-text { font-size: 14px; color: #5A4F43; font-style: italic; border-left: 4px solid #BD6653; padding-left: 12px; margin-bottom: 16px; background: #FDFDFD; }
 
-  /* 查看模式内容显示 */
-  .note-content-display {
-    font-size: 16px;
-    color: #222222;
-    line-height: 1.7;
-    margin-bottom: 12px;
-    white-space: pre-wrap; /* 保证换行和追加的时间戳能正确显示 */
-    max-height: 250px;
-    overflow-y: auto;
-  }
+  .note-content-display { font-size: 16px; color: #222222; line-height: 1.7; margin-bottom: 12px; white-space: pre-wrap; max-height: 250px; overflow-y: auto; }
   .note-meta { font-size: 11px; color: #999; margin-bottom: 16px; }
 
-  /* 编辑模式输入框 */
-  textarea, .edit-textarea {
-    width: 100%;
-    height: 160px;
-    border: 1px solid #EAE0CA;
-    border-radius: 8px;
-    padding: 14px;
-    font-size: 15px;
-    line-height: 1.6;
-    color: #333333;
-    background: #FAFAFA;
-    outline: none;
-    box-sizing: border-box;
-    margin-bottom: 10px;
-  }
+  textarea, .edit-textarea { width: 100%; height: 160px; border: 1px solid #EAE0CA; border-radius: 8px; padding: 14px; font-size: 15px; line-height: 1.6; color: #333333; background: #FAFAFA; outline: none; box-sizing: border-box; margin-bottom: 10px; }
   textarea:focus { border-color: #BD6653; }
 
   .modal-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
